@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,7 +20,7 @@
 
 package org.monarchinitiative.exomiser.core.phenotype;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.monarchinitiative.exomiser.core.phenotype.service.OntologyService;
 import org.monarchinitiative.exomiser.core.prioritisers.service.TestPriorityServiceFactory;
 
@@ -52,10 +52,10 @@ public class PhenotypeMatchServiceTest {
         List<PhenotypeTerm> queryTerms = instance.makePhenotypeTermsFromHpoIds(hpoIds);
         PhenotypeMatcher hpHpQueryMatcher = instance.getHumanPhenotypeMatcherForTerms(queryTerms);
 
-        ModelScorer modelScorer = PhenodigmModelScorer.forSameSpecies(hpHpQueryMatcher);
+        ModelScorer<TestModel> modelScorer = PhenodigmModelScorer.forSameSpecies(hpHpQueryMatcher);
 
-        Model exactMatch = new TestModel("EXACT_MATCH", hpoIds);
-        Model noMatch = new TestModel("NO_MATCH", Collections.emptyList());
+        TestModel exactMatch = new TestModel("EXACT_MATCH", hpoIds);
+        TestModel noMatch = new TestModel("NO_MATCH", Collections.emptyList());
 
         List<ModelPhenotypeMatch> matches = Stream.of(exactMatch, noMatch)
                 .map(modelScorer::scoreModel)

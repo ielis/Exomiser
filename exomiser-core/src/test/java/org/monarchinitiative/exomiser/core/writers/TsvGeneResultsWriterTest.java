@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,21 +25,23 @@
  */
 package org.monarchinitiative.exomiser.core.writers;
 
-import org.junit.Before;
-import org.junit.Test;
+import de.charite.compbio.jannovar.mendel.ModeOfInheritance;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.monarchinitiative.exomiser.core.analysis.Analysis;
 import org.monarchinitiative.exomiser.core.analysis.AnalysisResults;
 import org.monarchinitiative.exomiser.core.genome.TestFactory;
 import org.monarchinitiative.exomiser.core.model.Gene;
 
-import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.StringJoiner;
 
 import static org.hamcrest.CoreMatchers.equalTo;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 /**
  *
@@ -76,22 +78,31 @@ public class TsvGeneResultsWriterTest {
     private AnalysisResults analysisResults;
     private Analysis analysis = Analysis.builder().build();
     
-    @Before
+    @BeforeEach
     public void setUp() {
         Gene fgfr2 = TestFactory.newGeneFGFR2();
+        fgfr2.setCompatibleInheritanceModes(EnumSet.of(ModeOfInheritance.AUTOSOMAL_DOMINANT));
         Gene rbm8a = TestFactory.newGeneRBM8A();
+        rbm8a.setCompatibleInheritanceModes(EnumSet.of(ModeOfInheritance.AUTOSOMAL_DOMINANT));
         analysisResults = AnalysisResults.builder().genes(Arrays.asList(fgfr2, rbm8a)).build();
     }
 
     @Test
-    public void testWrite() {
+    public void testWrite() throws Exception {
+        Path tempFolder = Files.createTempDirectory("exomiser_test");
+        String outPrefix = tempFolder.resolve("testWrite").toString();
+
         OutputSettings settings = OutputSettings.builder()
-                .outputPrefix("testWrite")
+                .outputPrefix(outPrefix)
                 .outputFormats(EnumSet.of(OutputFormat.TSV_GENE))
                 .build();
-        instance.writeFile(analysis, analysisResults, settings);
-        assertTrue(Paths.get("testWrite.genes.tsv").toFile().exists());
-        assertTrue(Paths.get("testWrite.genes.tsv").toFile().delete());
+
+        instance.writeFile(ModeOfInheritance.AUTOSOMAL_DOMINANT, analysis, analysisResults, settings);
+
+        Path outputPath = tempFolder.resolve("testWrite_AD.genes.tsv");
+        assertThat(outputPath.toFile().exists(), is(true));
+        assertThat(outputPath.toFile().delete(), is(true));
+        Files.delete(tempFolder);
     }
 
     @Test
@@ -99,7 +110,7 @@ public class TsvGeneResultsWriterTest {
         OutputSettings settings = OutputSettings.builder()
                 .outputFormats(EnumSet.of(OutputFormat.TSV_GENE))
                 .build();
-        String outString = instance.writeString(analysis, analysisResults, settings);
+        String outString = instance.writeString(ModeOfInheritance.AUTOSOMAL_DOMINANT, analysis, analysisResults, settings);
         assertThat(outString, equalTo(HEADER + FGFR2_GENE_STRING + RBM8A_GENE_STRING));
     }
 
@@ -108,7 +119,7 @@ public class TsvGeneResultsWriterTest {
         OutputSettings settings = OutputSettings.builder()
                 .outputFormats(EnumSet.of(OutputFormat.TSV_GENE))
                 .build();
-        String outString = instance.writeString(analysis, analysisResults, settings);
+        String outString = instance.writeString(ModeOfInheritance.AUTOSOMAL_DOMINANT, analysis, analysisResults, settings);
         String[] lines = outString.split("\n");
         assertThat(lines[0] + "\n", equalTo(HEADER));
     }

@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -32,9 +32,7 @@ import org.monarchinitiative.exomiser.core.model.pathogenicity.PathogenicityData
 import org.monarchinitiative.exomiser.core.model.pathogenicity.RemmScore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
@@ -42,20 +40,19 @@ import java.io.IOException;
  *
  * @author Jules Jacobsen <j.jacobsen@qmul.ac.uk>
  */
-@Component
 public class RemmDao {
 
     private final Logger logger = LoggerFactory.getLogger(RemmDao.class);
 
     private final TabixDataSource remmTabixDataSource;
 
-    @Autowired
     public RemmDao(TabixDataSource remmTabixDataSource) {
         this.remmTabixDataSource = remmTabixDataSource;
     }
 
-    @Cacheable(value = "remm")
+    @Cacheable(value = "remm", keyGenerator = "variantKeyGenerator")
     public PathogenicityData getPathogenicityData(Variant variant) {
+        logger.debug("Getting REMM data for {}", variant);
         // REMM has not been trained on missense variants so skip these
         if (variant.getVariantEffect() == VariantEffect.MISSENSE_VARIANT) {
             return PathogenicityData.empty();
@@ -100,7 +97,7 @@ public class RemmDao {
         return refLength < altLength;
     }
 
-    private PathogenicityData getRemmData(String chromosome, int start, int end) {
+    private synchronized PathogenicityData getRemmData(String chromosome, int start, int end) {
         try {
             float remm = Float.NaN;
             String line;

@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -22,15 +22,15 @@ package org.monarchinitiative.exomiser.core.phenotype;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.*;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.junit.Assert.assertThat;
 
 /**
  * @author Jules Jacobsen <j.jacobsen@qmul.ac.uk>
@@ -56,7 +56,7 @@ public class CrossSpeciesPhenotypeMatcherTest {
     private final PhenotypeMatch bestToeMatch = PhenotypeMatch.builder().query(bigToe).match(longToe).lcs(toe).score(2.0).build();
     private final PhenotypeMatch bigToeCrookedToeMatch = PhenotypeMatch.builder().query(bigToe).match(crookedToe).lcs(toe).score(1.5).build();
 
-    @Before
+    @BeforeEach
     public void setUp() {
         Map<PhenotypeTerm, Set<PhenotypeMatch>> phenotypeMatches = new LinkedHashMap<>();
         phenotypeMatches.put(bigNose, Sets.newHashSet(perfectNoseMatch, noseMatch));
@@ -70,7 +70,7 @@ public class CrossSpeciesPhenotypeMatcherTest {
     }
 
     @Test
-    public void emptyInputValues() throws Exception {
+    public void emptyInputValues() {
         CrossSpeciesPhenotypeMatcher instance = new CrossSpeciesPhenotypeMatcher(Organism.HUMAN, Collections.emptyMap());
 
         assertThat(instance.getOrganism(), equalTo(Organism.HUMAN));
@@ -94,7 +94,7 @@ public class CrossSpeciesPhenotypeMatcherTest {
     }
 
     @Test
-    public void testGetBestForwardAndReciprocalMatches_returnsEmptyListFromEmptyQuery() throws Exception {
+    public void testGetBestForwardAndReciprocalMatchesReturnsEmptyListFromEmptyQuery() throws Exception {
         assertThat(instance.calculateBestForwardAndReciprocalMatches(Collections.emptyList()), equalTo(Collections.emptyList()));
     }
 

@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,11 +20,16 @@
 
 package org.monarchinitiative.exomiser.core.model;
 
-import org.junit.Test;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
+import java.util.List;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
-import static org.junit.Assert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * @author Jules Jacobsen <j.jacobsen@qmul.ac.uk>
@@ -33,24 +38,24 @@ public class GeneIdentifierTest {
 
     private static final GeneIdentifier EMPTY_GENE_IDENTIFIER = GeneIdentifier.builder().build();
 
-    @Test(expected = NullPointerException.class)
+    @Test
     public void testConstructorChecksForNullGeneSymbol() {
-        GeneIdentifier.builder().geneSymbol(null).build();
+        assertThrows(NullPointerException.class, () -> GeneIdentifier.builder().geneSymbol(null).build());
     }
 
-    @Test(expected = NullPointerException.class)
+    @Test
     public void testConstructorChecksGeneIdIsNotNull() {
-        new Gene(GeneIdentifier.builder().geneId(null).build());
+        assertThrows(NullPointerException.class, () -> new Gene(GeneIdentifier.builder().geneId(null).build()));
     }
 
-    @Test(expected = NullPointerException.class)
+    @Test
     public void testConstructorChecksEntrezIdIsNotNull() {
-        new Gene(GeneIdentifier.builder().entrezId(null).build());
+        assertThrows(NullPointerException.class, () -> new Gene(GeneIdentifier.builder().entrezId(null).build()));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testConstructorChecksEntrezIdIsValidInteger() {
-        new Gene(GeneIdentifier.builder().entrezId("wibble").build());
+        assertThrows(IllegalArgumentException.class, () -> new Gene(GeneIdentifier.builder().entrezId("wibble").build()));
     }
 
     @Test
@@ -128,4 +133,24 @@ public class GeneIdentifierTest {
         assertThat(geneIdentifier.hasEntrezId(), is(true));
     }
 
+    @Test
+    public void testToString() {
+        System.out.println(GeneIdentifier.builder()
+                .entrezId("2263")
+                .build()
+        );
+    }
+
+    @Test
+    public void testCompareTo() {
+        GeneIdentifier first = GeneIdentifier.builder().geneSymbol("1ABC").build();
+        GeneIdentifier second = GeneIdentifier.builder().geneSymbol("1BBC").build();
+        GeneIdentifier third = GeneIdentifier.builder().geneSymbol("2BCD").build();
+
+        List<GeneIdentifier> geneIdentifiers = Arrays.asList(second, first, third);
+
+        geneIdentifiers.sort(GeneIdentifier::compareTo);
+
+        assertThat(geneIdentifiers, equalTo(Arrays.asList(first, second, third)));
+    }
 }

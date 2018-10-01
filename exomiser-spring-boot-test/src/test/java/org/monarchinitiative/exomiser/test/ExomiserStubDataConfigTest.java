@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -22,11 +22,13 @@ package org.monarchinitiative.exomiser.test;
 
 import de.charite.compbio.jannovar.data.JannovarData;
 import htsjdk.tribble.readers.TabixReader;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.Test;
+import org.monarchinitiative.exomiser.core.prioritisers.util.DataMatrix;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
+
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.instanceOf;
@@ -36,8 +38,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 /**
  * @author Jules Jacobsen <j.jacobsen@qmul.ac.uk>
  */
-@RunWith(SpringRunner.class)
-@ContextConfiguration(classes = ExomiserStubDataConfig.class)
+@SpringJUnitConfig(ExomiserStubDataConfig.class)
 public class ExomiserStubDataConfigTest {
 
     @Autowired
@@ -54,6 +55,12 @@ public class ExomiserStubDataConfigTest {
 
     @Autowired
     private TabixReader localFrequencyTabixReader;
+
+    @Autowired
+    private DataMatrix dataMatrix;
+
+    @Autowired
+    private Path phenixDataDirectory;
 
     @Test
     public void testJannovarData() {
@@ -78,5 +85,15 @@ public class ExomiserStubDataConfigTest {
     @Test
     public void testLocalFrequencyTabixReader() {
         assertThat(localFrequencyTabixReader, instanceOf(TabixReader.class));
+    }
+
+    @Test
+    public void testDataMatrix() {
+        assertThat(dataMatrix, instanceOf(DataMatrix.class));
+    }
+
+    @Test
+    public void phenixDataDirectory() {
+        assertThat(phenixDataDirectory, equalTo(Paths.get("phenix")));
     }
 }

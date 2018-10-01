@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,25 +25,17 @@
  */
 package org.monarchinitiative.exomiser.core.writers;
 
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.Mockito;
-import org.thymeleaf.TemplateEngine;
+import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 /**
  * @author Jules Jacobsen <jules.jacobsen@sanger.ac.uk>
  */
 public class ResultsWriterFactoryTest {
 
-    private ResultsWriterFactory instance;
-
-    @Before
-    public void setUp() {
-        instance = new ResultsWriterFactory(Mockito.mock(TemplateEngine.class));
-    }
+    private final ResultsWriterFactory instance = new ResultsWriterFactory();
 
     @Test
     public void testGetHtmlResultsWriter() {
@@ -79,6 +71,13 @@ public class ResultsWriterFactoryTest {
         OutputFormat outputFormat = OutputFormat.PHENOGRID;
         ResultsWriter result = instance.getResultsWriter(outputFormat);
         assertThat(result, instanceOf(PhenogridWriter.class));
+    }
+
+    @Test
+    public void testGetJsonResultsWriter() {
+        OutputFormat outputFormat = OutputFormat.JSON;
+        ResultsWriter result = instance.getResultsWriter(outputFormat);
+        assertThat(result, instanceOf(JsonResultsWriter.class));
     }
 
 }

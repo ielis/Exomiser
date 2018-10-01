@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,8 +25,9 @@
  */
 package org.monarchinitiative.exomiser.core.prioritisers;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.monarchinitiative.exomiser.core.phenotype.PhenotypeMatchService;
 import org.monarchinitiative.exomiser.core.phenotype.dao.HumanPhenotypeOntologyDao;
 import org.monarchinitiative.exomiser.core.phenotype.dao.MousePhenotypeOntologyDao;
@@ -38,19 +39,19 @@ import org.monarchinitiative.exomiser.core.prioritisers.service.PriorityService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.jdbc.Sql;
-import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import java.util.Collections;
-import java.util.List;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.CoreMatchers.instanceOf;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  *
  * @author Jules Jacobsen <jules.jacobsen@sanger.ac.uk>
  */
-@RunWith(SpringJUnit4ClassRunner.class)
+@ExtendWith(SpringExtension.class)
 @ContextConfiguration(classes = {
         PriorityFactoryImpl.class,
         PriorityFactoryTestConfig.class,
@@ -74,76 +75,37 @@ public class PriorityFactoryImplTest {
     @Autowired
     private PriorityFactoryImpl instance;
 
-    private PrioritiserSettings buildValidSettingsWithPrioritiser(PriorityType priorityType) {
-        return PrioritiserSettings.builder().usePrioritiser(priorityType).build();
-    }
-
     @Test
-    public void testCanGetOmimPrioritizerByType() {
-        PriorityType type = PriorityType.OMIM_PRIORITY;
-        PrioritiserSettings settings = buildValidSettingsWithPrioritiser(type);
-
-        Prioritiser prioritiser = instance.makePrioritiser(settings);
-        assertThat(prioritiser.getPriorityType(), equalTo(type));
+    public void testMakeOmimPrioritiser() {
+        assertThat(instance.makeOmimPrioritiser(), instanceOf(OmimPriority.class));
     }
 
     @Test
     public void testmakePrioritiserForExomeWalkerPriority() {
-        PriorityType type = PriorityType.EXOMEWALKER_PRIORITY;
-        PrioritiserSettings settings = buildValidSettingsWithPrioritiser(type);
-
-        Prioritiser prioritiser = instance.makePrioritiser(settings);
-        assertThat(prioritiser.getPriorityType(), equalTo(type));
+        assertThat(instance.makeExomeWalkerPrioritiser(Collections.emptyList()), instanceOf(ExomeWalkerPriority.class));
     }
 
     @Test
     public void testmakePrioritiserForHiPhivePriority() {
-        PriorityType type = PriorityType.HIPHIVE_PRIORITY;
-        PrioritiserSettings settings = buildValidSettingsWithPrioritiser(type);
-
-        Prioritiser prioritiser = instance.makePrioritiser(settings);
-        assertThat(prioritiser.getPriorityType(), equalTo(type));
+        assertThat(instance.makeHiPhivePrioritiser(HiPhiveOptions.defaults()), instanceOf(HiPhivePriority.class));
     }
 
     @Test
     public void testmakeHiPhivePrioritiserWithDiseaseIdAndEmptyHpoList() {
-        PriorityType type = PriorityType.HIPHIVE_PRIORITY;
-        List<String> emptyStringList = Collections.emptyList();
-        PrioritiserSettings settings = PrioritiserSettings.builder()
-                .usePrioritiser(type)
+        HiPhiveOptions hiPhiveOptions = HiPhiveOptions.builder()
                 .diseaseId("OMIM:101600")
-                .hpoIdList(emptyStringList)
                 .build();
-
-        Prioritiser prioritiser = instance.makePrioritiser(settings);
-        assertThat(prioritiser.getPriorityType(), equalTo(type));
+        assertThat(instance.makeHiPhivePrioritiser(hiPhiveOptions), instanceOf(HiPhivePriority.class));
     }
 
     @Test
     public void testmakePrioritiserForPhivePriority() {
-        PriorityType type = PriorityType.PHIVE_PRIORITY;
-        PrioritiserSettings settings = buildValidSettingsWithPrioritiser(type);
-
-        Prioritiser prioritiser = instance.makePrioritiser(settings);
-        assertThat(prioritiser.getPriorityType(), equalTo(type));
-    }
-
-    @Test(expected = RuntimeException.class)
-    public void testmakePrioritiserForPhenixPriorityThrowsRuntimeExceptionDueToMissingPhenixData() {
-        PriorityType type = PriorityType.PHENIX_PRIORITY;
-        PrioritiserSettings settings = buildValidSettingsWithPrioritiser(type);
-
-        Prioritiser prioritiser = instance.makePrioritiser(settings);
-        assertThat(prioritiser.getPriorityType(), equalTo(type));
+        assertThat(instance.makePhivePrioritiser(), instanceOf(PhivePriority.class));
     }
 
     @Test
-    public void testmakePrioritiserNonePriorityReturnsNoneTypePrioritiser() {
-        PriorityType type = PriorityType.NONE;
-        PrioritiserSettings settings = buildValidSettingsWithPrioritiser(type);
-
-        Prioritiser prioritiser = instance.makePrioritiser(settings);
-        assertThat(prioritiser.getPriorityType(), equalTo(PriorityType.NONE));
+    public void testmakePrioritiserForPhenixPriorityThrowsRuntimeExceptionDueToMissingPhenixData() {
+        assertThrows(NullPointerException.class, () -> instance.makePhenixPrioritiser());
     }
 
 }

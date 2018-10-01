@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,6 +20,8 @@
 
 package org.monarchinitiative.exomiser.core.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.util.Objects;
 
 /**
@@ -28,11 +30,11 @@ import java.util.Objects;
  * or a human gene using one of the mapped coordinate systems as an implicit default via the getGeneId and getGeneSymbol methods.
  *
  * @author Jules Jacobsen <j.jacobsen@qmul.ac.uk>
+ * @since 8.0.0
  */
-public class GeneIdentifier {
+public final class GeneIdentifier implements Comparable<GeneIdentifier>{
 
     public static final String EMPTY_FIELD = "";
-    public static final Integer NULL_ENTREZ_ID = -1;
 
     private final String geneId;
     private final String geneSymbol;
@@ -41,6 +43,7 @@ public class GeneIdentifier {
     private final String hgncSymbol;
 
     private final String entrezId;
+    private final int entrezIdIntValue;
     private final String ensemblId;
     private final String ucscId;
 
@@ -52,23 +55,23 @@ public class GeneIdentifier {
         this.hgncSymbol = builder.hgncSymbol;
 
         //the entrezId is used by the Prioritisers as a primary key for the gene so this is important!
-        this.entrezId = validateEntrezId(builder.entrezId);
+        this.entrezId = builder.entrezId;
+        this.entrezIdIntValue = validateEntrezIdIntValue(builder.entrezId);
         this.ensemblId = builder.ensemblId;
         this.ucscId = builder.ucscId;
     }
 
-    private String validateEntrezId(String entrezId) {
+    private int validateEntrezIdIntValue(String entrezId) {
         Objects.requireNonNull(entrezId, "GeneIdentifier entrezId cannot be null");
         if (entrezId.isEmpty()) {
             //This is permissible - will default to returning a NULL_ENTREZ_ID
-            return entrezId;
+            return -1;
         }
         try {
-            Integer.valueOf(entrezId);
+            return Integer.parseInt(entrezId);
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("entrezId '" + entrezId + "' is invalid. GeneIdentifier entrezId must be a positive integer");
         }
-        return entrezId;
     }
 
     public String getGeneId() {
@@ -91,8 +94,9 @@ public class GeneIdentifier {
         return entrezId;
     }
 
+    @JsonIgnore
     public Integer getEntrezIdAsInteger() {
-        return entrezId.equals(EMPTY_FIELD) ? NULL_ENTREZ_ID : Integer.valueOf(entrezId);
+        return entrezIdIntValue;
     }
 
     public boolean hasEntrezId() {
@@ -105,6 +109,39 @@ public class GeneIdentifier {
 
     public String getUcscId() {
         return ucscId;
+    }
+
+
+    /**
+     * Compares the two specified {@code GeneIdentifier} values based on the natural lexicographical order of their
+     * gene symbols.
+     *
+     * @param otherGeneIdentifier The other {@code GeneIdentifier} to be compared against this one.
+     * @return
+     * @since 10.0.0
+     */
+    public int compareTo(GeneIdentifier otherGeneIdentifier) {
+        Objects.requireNonNull(otherGeneIdentifier);
+        return GeneIdentifier.compare(this, otherGeneIdentifier);
+    }
+
+    /**
+     * Compares the two specified {@code GeneIdentifier} values based on the natural lexicographical order of their
+     * gene symbols.
+     *
+     * @param g1 the first {@code GeneIdentifier} to be compared.
+     * @param g2 the second {@code GeneIdentifier} to be compared.
+     * @return the value {@code 0} if the argument {@code GeneIdentifier} gene symbol is equal to
+     *          this gene symbol; a value less than {@code 0} if this gene symbol
+     *          is lexicographically less than the {@code GeneIdentifier} argument gene symbol; and a
+     *          value greater than {@code 0} if this gene symbol is
+     *          lexicographically greater than the {@code GeneIdentifier} argument gene symbol.
+     * @since 10.0.0
+     */
+    public static int compare(GeneIdentifier g1, GeneIdentifier g2) {
+        String g1GeneSymbol = g1.getGeneSymbol();
+        String g2GeneSymbol = g2.getGeneSymbol();
+        return g1GeneSymbol.compareTo(g2GeneSymbol);
     }
 
     @Override

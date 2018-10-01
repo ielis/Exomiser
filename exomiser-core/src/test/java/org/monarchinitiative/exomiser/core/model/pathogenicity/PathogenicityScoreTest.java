@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -26,30 +26,22 @@
 
 package org.monarchinitiative.exomiser.core.model.pathogenicity;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 import static org.hamcrest.CoreMatchers.equalTo;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  *
  * @author jj8
  */
 public class PathogenicityScoreTest {
-    
-    public PathogenicityScoreTest() {
-    }
-    
-    @Before
-    public void setUp() {
-    }
 
-    
     @Test
     public void testComparableOnlySiftScores() {
         SiftScore mostPathogenic = SiftScore.valueOf(0.001f);
@@ -130,12 +122,11 @@ public class PathogenicityScoreTest {
         
     }
     
-    @Test(expected = NullPointerException.class)
-    public void comparingAPathogenicityScoreToANullThrowsANullPOinterException() {
+    @Test
+    public void comparingPathogenicityScoreToNullThrowsNullPointerException() {
         PolyPhenScore polyPhenScore = PolyPhenScore.valueOf(1);
-        PolyPhenScore nullScore = null;
-        
-        polyPhenScore.compareTo(nullScore);
+
+        assertThrows(NullPointerException.class, () -> polyPhenScore.compareTo(null));
     }
 
 }

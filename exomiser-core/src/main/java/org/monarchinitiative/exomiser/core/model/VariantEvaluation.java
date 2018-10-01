@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -21,17 +21,20 @@
 package org.monarchinitiative.exomiser.core.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import de.charite.compbio.jannovar.annotation.VariantEffect;
 import de.charite.compbio.jannovar.mendel.ModeOfInheritance;
 import htsjdk.variant.variantcontext.*;
 import org.monarchinitiative.exomiser.core.filters.FilterResult;
 import org.monarchinitiative.exomiser.core.filters.FilterType;
+import org.monarchinitiative.exomiser.core.genome.GenomeAssembly;
 import org.monarchinitiative.exomiser.core.model.frequency.FrequencyData;
 import org.monarchinitiative.exomiser.core.model.pathogenicity.PathogenicityData;
-import org.monarchinitiative.exomiser.core.model.pathogenicity.VariantTypePathogenicityScores;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.monarchinitiative.exomiser.core.model.pathogenicity.VariantEffectPathogenicityScore;
 
 import java.util.*;
 
@@ -43,9 +46,8 @@ import java.util.*;
  * @author Jules Jacobsen <jules.jacobsen@sanger.ac.uk>
  * @author Peter Robinson <peter.robinson@charite.de>
  */
+@JsonPropertyOrder({"genomeAssembly", "chromosomeName", "chromosome", "position", "ref", "alt", "phredScore", "variantEffect", "nonCodingVariant", "filterStatus", "variantScore", "frequencyScore", "pathogenicityScore", "predictedPathogenic", "passedFilterTypes", "failedFilterTypes", "frequencyData", "pathogenicityData", "compatibleInheritanceModes", "contributingInheritanceModes", "transcriptAnnotations"})
 public class VariantEvaluation implements Comparable<VariantEvaluation>, Filterable, Inheritable, Variant {
-
-    private static final Logger logger = LoggerFactory.getLogger(VariantEvaluation.class);
 
     //threshold over which a variant effect score is considered pathogenic
     private static final float DEFAULT_PATHOGENICITY_THRESHOLD = 0.5f;
@@ -57,61 +59,68 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
     // numeric index of the alternative allele in {@link #vc}.
     private final int altAlleleId;
 
-    //VariantCoordinates variables - these are a minimal requirement for describing a variant
+    // VariantCoordinates variables - these are a minimal requirement for describing a variant
+    private final GenomeAssembly genomeAssembly;
     private final int chr;
     private final String chromosomeName;
     private final int pos;
     private final String ref;
     private final String alt;
 
-    //Variant variables, for a richer more VCF-like experience
-    private final int numIndividuals;
+    // Variant variables, for a richer more VCF-like experience
     private final double phredScore;
 
-    //Jannovar annotations
-    private final boolean isOffExome;
+    @JsonIgnore
+    private Map<String,SampleGenotype> sampleGenotypes;
+
+    //VariantAnnotation
     private VariantEffect variantEffect;
     private List<TranscriptAnnotation> annotations;
+    @JsonIgnore
     private String geneSymbol;
-    private int entrezGeneId;
+    @JsonIgnore
+    private String geneId;
 
-    //results from filters
+    // results from filters
+    // mutable
     private final Set<FilterType> passedFilterTypes;
     private final Set<FilterType> failedFilterTypes;
 
-    //score-related stuff
+    // score-related stuff - these are mutable
     private FrequencyData frequencyData;
     private PathogenicityData pathogenicityData;
-    private boolean contributesToGeneScore = false;
-    private Set<ModeOfInheritance> inheritanceModes = EnumSet.noneOf(ModeOfInheritance.class);
-
-    //bit of an orphan variable - look into refactoring this
-    @JsonIgnore
-    private List<String> mutationRefList = null;
+    @JsonProperty("contributingInheritanceModes")
+    private Set<ModeOfInheritance> contributingModes = EnumSet.noneOf(ModeOfInheritance.class);
+    private Set<ModeOfInheritance> compatibleInheritanceModes = EnumSet.noneOf(ModeOfInheritance.class);
 
     private VariantEvaluation(Builder builder) {
+        genomeAssembly = builder.genomeAssembly;
         chr = builder.chr;
         chromosomeName = builder.chromosomeName;
         pos = builder.pos;
         ref = builder.ref;
         alt = builder.alt;
 
-        numIndividuals = builder.numIndividuals;
         phredScore = builder.phredScore;
-        isOffExome = builder.isOffExome;
         variantEffect = builder.variantEffect;
-        annotations = builder.annotations;
+        annotations = ImmutableList.copyOf(builder.annotations);
         geneSymbol = builder.geneSymbol;
-        entrezGeneId = builder.entrezGeneId;
+        geneId = builder.geneId;
 
         variantContext = builder.variantContext;
         altAlleleId = builder.altAlleleId;
+        sampleGenotypes = ImmutableMap.copyOf(builder.sampleGenotypes);
 
         passedFilterTypes = EnumSet.copyOf(builder.passedFilterTypes);
         failedFilterTypes = EnumSet.copyOf(builder.failedFilterTypes);
 
         frequencyData = builder.frequencyData;
         pathogenicityData = builder.pathogenicityData;
+    }
+
+    @Override
+    public GenomeAssembly getGenomeAssembly() {
+        return genomeAssembly;
     }
 
     /**
@@ -164,7 +173,6 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
         return altAlleleId;
     }
 
-    @Override
     public double getPhredScore() {
         return phredScore;
     }
@@ -179,7 +187,6 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
         return variantEffect;
     }
     
-    @Override
     public void setVariantEffect (VariantEffect ve){
         variantEffect = ve;
     }
@@ -192,38 +199,17 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
         return geneSymbol;
     }
 
-    @Override
     public void setGeneSymbol(String symbol) {
         geneSymbol = symbol;
     }
-    
-    @Override
-    public int getEntrezGeneId() {
-        return entrezGeneId;
-    }
-    
-    @Override
-    public void setEntrezGeneId(int id) {
-        entrezGeneId = id;
-    }
 
     @Override
-    public boolean isXChromosomal() {
-        return chr == 23;
+    public String getGeneId() {
+        return geneId;
     }
 
-    @Override
-    public boolean isYChromosomal() {
-        return chr == 24;
-    }
-
-    /**
-     * @return true if the variant belongs to a class that is non-exonic and
-     * non-splicing.
-     */
-    @Override
-    public boolean isOffExome() {
-        return isOffExome;
+    public void setGeneId(String geneId) {
+        this.geneId = geneId;
     }
 
     /**
@@ -239,49 +225,45 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
      * <p>
      */
     @Override
-    public List<TranscriptAnnotation> getAnnotations() {
+    public List<TranscriptAnnotation> getTranscriptAnnotations() {
         return annotations;
     }
     
-    @Override
     public void setAnnotations(List<TranscriptAnnotation> annotations) {
         this.annotations = annotations;
     }
 
-    public boolean hasAnnotations() {
-        return !getAnnotations().isEmpty();
+    @Override
+    public boolean hasTranscriptAnnotations() {
+        return !annotations.isEmpty();
     }
 
     /**
      * @return a String such as chr6:g.29911092G>T
      */
-    @Override
+    // SPDI?
+    @JsonIgnore
     public String getHgvsGenome() {
         return chr + ":g." + pos + ref + ">" + alt;
     }
 
+    @JsonIgnore
     public String getGenotypeString() {
+        //TODO: build this from the sampleGenotypes
         // collect genotype string list
         List<String> gtStrings = new ArrayList<>();
         for (Genotype gt : variantContext.getGenotypes()) {
-            boolean firstAllele = true;
-            StringBuilder builder = new StringBuilder();
+            StringJoiner genotypeStringJoiner = new StringJoiner("/");
             for (Allele allele : gt.getAlleles()) {
-                if (firstAllele) {
-                    firstAllele = false;
-                } else {
-                    builder.append('/');
-                }
-
                 if (allele.isNoCall()) {
-                    builder.append('.');
+                    genotypeStringJoiner.add(".");
                 } else if (allele.equals(variantContext.getAlternateAllele(altAlleleId))) {
-                    builder.append('1');
+                    genotypeStringJoiner.add("1");
                 } else {
-                    builder.append('0');
+                    genotypeStringJoiner.add("0");
                 }
             }
-            gtStrings.add(builder.toString());
+            gtStrings.add(genotypeStringJoiner.toString());
         }
 
         // normalize 1/0 to 0/1 and join genotype strings with colon
@@ -294,35 +276,24 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
     }
 
     /**
-     * @return the number of individuals with a genotype at this variant.
+     * @return A map of sample ids and their corresponding {@link SampleGenotype}
+     * @since 11.0.0
      */
-    public int getNumberOfIndividuals() {
-        return numIndividuals;
+    public Map<String, SampleGenotype> getSampleGenotypes() {
+        return sampleGenotypes;
     }
 
     /**
-     * Add a mutation from ClinVar or HGMD to {@link #mutationRefList}. Note
-     * that for now, we code this as cv|url or hd|url to save space.
+     * Returns the {@link SampleGenotype} for a given sample identifier. If the identifier is not found an empty
+     * {@link SampleGenotype} will be returned.
      *
-     * @param anch An HTML anchor element.
+     * @param sampleId sample id of the individual of interest
+     * @return the {@link SampleGenotype} of the individual for this variant, or an empty {@link SampleGenotype} if the
+     * sample is not represented
+     * @since 11.0.0
      */
-    public void addMutationReference(String anch) {
-        if (this.mutationRefList == null) {
-            this.mutationRefList = new ArrayList<>();
-        }
-        this.mutationRefList.add(anch);
-    }
-
-    /**
-     * @return list of ClinVar and HGMD references for this position. Note, it
-     * returns an empty (but non-null) list if no mutations were found.
-     */
-    public List<String> getMutationReferenceList() {
-        if (this.mutationRefList == null) {
-            return new ArrayList<>();
-        } else {
-            return this.mutationRefList;
-        }
+    public SampleGenotype getSampleGenotype(String sampleId) {
+        return sampleGenotypes.getOrDefault(sampleId, SampleGenotype.empty());
     }
 
     /**
@@ -340,12 +311,12 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
         return addFailedFilterResult(filterResult);
     }
 
-    private boolean addPassedFilterResult(FilterResult filterResult) {
+    private synchronized boolean addPassedFilterResult(FilterResult filterResult) {
         passedFilterTypes.add(filterResult.getFilterType());
         return true;
     }
 
-    private boolean addFailedFilterResult(FilterResult filterResult) {
+    private synchronized boolean addFailedFilterResult(FilterResult filterResult) {
         failedFilterTypes.add(filterResult.getFilterType());
         return false;
     }
@@ -355,7 +326,7 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
      * filtering
      */
     public Set<FilterType> getPassedFilterTypes() {
-        return passedFilterTypes;
+        return EnumSet.copyOf(passedFilterTypes);
     }
 
     /**
@@ -363,7 +334,25 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
      * failed to pass.
      */
     public Set<FilterType> getFailedFilterTypes() {
-        return failedFilterTypes;
+        return EnumSet.copyOf(failedFilterTypes);
+    }
+
+    /**
+     * Under some inheritance modes a variant should not pass, but others it will. For example if a variant is relatively
+     * common it could pass as being compatible under a compound heterozygous model, but might be too common to be
+     * considered as a candidate under an autosomal dominant model. Hence we need to be able to check whether a variant
+     * passed under a specific mode of inheritance otherwise alleles will be reported as having passed under the wrong mode.
+     *
+     * @param modeOfInheritance the mode of inheritance under which the failed filters are required.
+     * @return a set of failed {@code FilterType} for the variant under the {@code ModeOfInheritance} input model.
+     */
+    public synchronized Set<FilterType> getFailedFilterTypesForMode(ModeOfInheritance modeOfInheritance){
+        EnumSet<FilterType> failedFiltersCopy = EnumSet.copyOf(failedFilterTypes);
+        if (!isCompatibleWith(modeOfInheritance)) {
+            failedFiltersCopy.add(FilterType.INHERITANCE_FILTER);
+            return failedFiltersCopy;
+        }
+        return failedFiltersCopy;
     }
 
     /**
@@ -378,16 +367,16 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
      * @return
      */
     @Override
-    public boolean passedFilters() {
+    public synchronized boolean passedFilters() {
         return failedFilterTypes.isEmpty();
     }
 
     @Override
-    public boolean passedFilter(FilterType filterType) {
+    public synchronized boolean passedFilter(FilterType filterType) {
         return !failedFilterTypes.contains(filterType) && passedFilterTypes.contains(filterType);
     }
 
-    private boolean isUnFiltered() {
+    private synchronized boolean isUnFiltered() {
         return failedFilterTypes.isEmpty() && passedFilterTypes.isEmpty();
     }
 
@@ -396,6 +385,16 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
             return FilterStatus.UNFILTERED;
         }
         if (passedFilters()) {
+            return FilterStatus.PASSED;
+        }
+        return FilterStatus.FAILED;
+    }
+
+    public FilterStatus getFilterStatusForMode(ModeOfInheritance modeOfInheritance) {
+        if (isUnFiltered()) {
+            return FilterStatus.UNFILTERED;
+        }
+        if (isCompatibleWith(modeOfInheritance) && passedFilters()) {
             return FilterStatus.PASSED;
         }
         return FilterStatus.FAILED;
@@ -426,8 +425,8 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
      * amongst variants predicted to be potentially pathogenic, there are different strengths of prediction, which is
      * what this score tries to reflect.
      *
-     * For missense mutations, we use the predictions of MutationTaster, polyphen, and SIFT taken from the data from
-     * the dbNSFP project.
+     * For missense mutations, we use the predictions of MutationTaster, polyphen, and SIFT taken from the dbNSFP
+     * project, if present, or otherwise return a default score.
      *
      * The score returned here is therefore an overall pathogenicity score defined on the basis of
      * "medical genetic intuition".
@@ -435,22 +434,20 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
      * @return a score between 0 and 1
      */
     public float getPathogenicityScore() {
-        if (pathogenicityData.hasPredictedScore()) {
-            return pathogenicityData.getScore();
-        }
-        //this will return 0 for SEQUENCE_VARIANT effects (i.e. unknown)
-        //return the default score - in time we might want to use the predicted score if there are any and handle things like the missense variants.
-        return VariantTypePathogenicityScores.getPathogenicityScoreOf(variantEffect);
-    }
+        float predictedScore = pathogenicityData.getScore();
+        float variantEffectScore = VariantEffectPathogenicityScore.getPathogenicityScoreOf(variantEffect);
+            if (variantEffect == VariantEffect.MISSENSE_VARIANT) {
+            // CAUTION! REVEL scores tend to be more nuanced and frequently lower thant either the default variant effect score
+            // or the other predicted path scores, yet apparently are more concordant with ClinVar. For this reason it might be
+            // best to check for a REVEL prediction and defer wholly to that if present rather than do the following.
 
-    /*
-     * Retained in case we have some non-missesnse variants in the database. Shouldn't be needed though.
-     */
-    private float calculateMissenseScore(PathogenicityData pathogenicityData) {
-        if (pathogenicityData.hasPredictedScore()) {
-            return pathogenicityData.getScore();
+            // In version 10.1.0 the MISSENSE variant constraint was removed from the defaultPathogenicityDao and variantDataServiceImpl
+            // so that non-missense variants would get ClinVar annotations and other non-synonymous path scores from the variant store.
+            // In order that missense variants are not over-represented if they have poor predicted scores this clause was added here.
+            return pathogenicityData.hasPredictedScore() ? predictedScore : variantEffectScore;
+        } else {
+            return Math.max(predictedScore, variantEffectScore);
         }
-        return VariantTypePathogenicityScores.DEFAULT_MISSENSE_SCORE;
     }
 
     public FrequencyData getFrequencyData() {
@@ -469,12 +466,16 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
         this.pathogenicityData = pathogenicityData;
     }
 
-    public void setAsContributingToGeneScore() {
-        contributesToGeneScore = true;
+    public void setContributesToGeneScoreUnderMode(ModeOfInheritance modeOfInheritance) {
+        contributingModes.add(modeOfInheritance);
     }
 
     public boolean contributesToGeneScore() {
-        return contributesToGeneScore;
+        return !contributingModes.isEmpty();
+    }
+
+    public boolean contributesToGeneScoreUnderMode(ModeOfInheritance modeOfInheritance) {
+        return modeOfInheritance == ModeOfInheritance.ANY && !contributingModes.isEmpty() || contributingModes.contains(modeOfInheritance);
     }
 
     /**
@@ -493,22 +494,22 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
     }
 
     @Override
-    public void setInheritanceModes(Set<ModeOfInheritance> compatibleModes) {
+    public void setCompatibleInheritanceModes(Set<ModeOfInheritance> compatibleModes) {
         if (compatibleModes.isEmpty()) {
-            inheritanceModes = EnumSet.noneOf(ModeOfInheritance.class);
+            compatibleInheritanceModes = EnumSet.noneOf(ModeOfInheritance.class);
         } else {
-            this.inheritanceModes = EnumSet.copyOf(compatibleModes);
+            this.compatibleInheritanceModes = EnumSet.copyOf(compatibleModes);
         }
     }
     
     @Override
-    public Set<ModeOfInheritance> getInheritanceModes() {
-        return inheritanceModes;
+    public Set<ModeOfInheritance> getCompatibleInheritanceModes() {
+        return EnumSet.copyOf(compatibleInheritanceModes);
     }
 
     @Override
     public boolean isCompatibleWith(ModeOfInheritance modeOfInheritance) {
-        return inheritanceModes.contains(modeOfInheritance);
+        return modeOfInheritance == ModeOfInheritance.ANY || compatibleInheritanceModes.contains(modeOfInheritance);
     }
     
     /**
@@ -541,8 +542,8 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
     }
 
     public static int compareByRank(VariantEvaluation some, VariantEvaluation other) {
-        if (some.contributesToGeneScore != other.contributesToGeneScore) {
-            return -Boolean.compare(some.contributesToGeneScore, other.contributesToGeneScore);
+        if (some.contributesToGeneScore() != other.contributesToGeneScore()) {
+            return -Boolean.compare(some.contributesToGeneScore(), other.contributesToGeneScore());
         }
         float thisScore = some.getVariantScore();
         float otherScore = other.getVariantScore();
@@ -563,12 +564,7 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
 
     @Override
     public int hashCode() {
-        int hash = 3;
-        hash = 71 * hash + this.chr;
-        hash = 71 * hash + this.pos;
-        hash = 71 * hash + Objects.hashCode(this.ref);
-        hash = 71 * hash + Objects.hashCode(this.alt);
-        return hash;
+        return Objects.hash(genomeAssembly, chr, pos, ref, alt);
     }
 
     @Override
@@ -580,27 +576,27 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
             return false;
         }
         final VariantEvaluation other = (VariantEvaluation) obj;
+        if (this.genomeAssembly != other.genomeAssembly) {
+            return false;
+        }
         if (this.chr != other.chr) {
             return false;
         }
         if (this.pos != other.pos) {
             return false;
         }
-        if (!Objects.equals(this.ref, other.ref)) {
-            return false;
-        }
-        return Objects.equals(this.alt, other.alt);
+        return Objects.equals(this.ref, other.ref) && Objects.equals(this.alt, other.alt);
     }
 
     public String toString() {
-        //TODO: expose frequency and pathogenicity scores?
-        if(contributesToGeneScore) {
+        // expose frequency and pathogenicity scores?
+        if(contributesToGeneScore()) {
             //Add a star to the output string between the variantEffect and the score
-            return "VariantEvaluation{chr=" + chr + " pos=" + pos + " ref=" + ref + " alt=" + alt + " qual=" + phredScore + " " + variantEffect + " * score=" + getVariantScore() + " " + getFilterStatus() + " failedFilters=" + failedFilterTypes + " passedFilters=" + passedFilterTypes
-                    + " compatibleWith=" + inheritanceModes + "}";
+            return "VariantEvaluation{assembly=" + genomeAssembly + " chr=" + chr + " pos=" + pos + " ref=" + ref + " alt=" + alt + " qual=" + phredScore + " " + variantEffect + " * score=" + getVariantScore() + " " + getFilterStatus() + " failedFilters=" + failedFilterTypes + " passedFilters=" + passedFilterTypes
+                    + " compatibleWith=" + compatibleInheritanceModes + " sampleGenotypes=" + sampleGenotypes + "}";
         }
-        return "VariantEvaluation{chr=" + chr + " pos=" + pos + " ref=" + ref + " alt=" + alt + " qual=" + phredScore + " " + variantEffect + " score=" + getVariantScore() + " " + getFilterStatus() + " failedFilters=" + failedFilterTypes + " passedFilters=" + passedFilterTypes
-                + " compatibleWith=" + inheritanceModes + "}";
+        return "VariantEvaluation{assembly=" + genomeAssembly + " chr=" + chr + " pos=" + pos + " ref=" + ref + " alt=" + alt + " qual=" + phredScore + " " + variantEffect + " score=" + getVariantScore() + " " + getFilterStatus() + " failedFilters=" + failedFilterTypes + " passedFilters=" + passedFilterTypes
+                + " compatibleWith=" + compatibleInheritanceModes + " sampleGenotypes=" + sampleGenotypes + "}";
     }
 
     public static Builder builder(int chr, int pos, String ref, String alt) {
@@ -612,29 +608,33 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
      */
     public static class Builder {
 
+        private GenomeAssembly genomeAssembly = GenomeAssembly.HG19;
         private int chr;
         private String chromosomeName;
         private int pos;
         private String ref;
         private String alt;
 
-        private int numIndividuals = 1;
         private double phredScore = 0;
 
-        private boolean isOffExome;
         private VariantEffect variantEffect = VariantEffect.SEQUENCE_VARIANT;
         private List<TranscriptAnnotation> annotations = Collections.emptyList();
         private String geneSymbol = ".";
-        private int entrezGeneId = GeneIdentifier.NULL_ENTREZ_ID;
+        private String geneId = GeneIdentifier.EMPTY_FIELD;
 
         private VariantContext variantContext;
         private int altAlleleId;
+        private Map<String,SampleGenotype> sampleGenotypes = ImmutableMap.of();
 
         private PathogenicityData pathogenicityData = PathogenicityData.empty();
         private FrequencyData frequencyData = FrequencyData.empty();
 
         private final Set<FilterType> passedFilterTypes = EnumSet.noneOf(FilterType.class);
         private final Set<FilterType> failedFilterTypes = EnumSet.noneOf(FilterType.class);
+
+        private static final String DEFAULT_SAMPLE_NAME = SampleIdentifier.defaultSample().getId();
+        // These shouldn't be used in production, but in cases where there is no genotype this will prevent NullPointer and ArrayIndexOutOfBounds Exceptions
+        static final ImmutableMap<String, SampleGenotype> SINGLE_SAMPLE_HET_GENOTYPE = ImmutableMap.of(DEFAULT_SAMPLE_NAME, SampleGenotype.het());
 
         /**
          * Creates a minimal variant
@@ -649,6 +649,16 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
             this.pos = pos;
             this.ref = ref;
             this.alt = alt;
+        }
+
+        public Builder genomeAssembly(GenomeAssembly genomeAssembly) {
+            this.genomeAssembly = genomeAssembly;
+            return this;
+        }
+
+        public Builder genomeAssembly(String genomeAssembly) {
+            this.genomeAssembly = GenomeAssembly.fromValue(genomeAssembly);
+            return this;
         }
 
         public Builder chromosomeName(String chromosomeName) {
@@ -673,7 +683,7 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
                 case 24:
                     return "Y";
                 case 25:
-                    return "M";
+                    return "MT";
                 default:
                     return String.valueOf(chr);
             }
@@ -694,39 +704,40 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
             return this;
         }
 
-        public Builder numIndividuals(int numIndividuals) {
-            this.numIndividuals = numIndividuals;
-            return this;
-        }
-
-        public Builder isOffExome(boolean isOffExome) {
-            this.isOffExome = isOffExome;
+        public Builder sampleGenotypes(Map<String, SampleGenotype> sampleGenotypes) {
+            Objects.requireNonNull(sampleGenotypes);
+            this.sampleGenotypes = sampleGenotypes;
             return this;
         }
 
         public Builder variantEffect(VariantEffect variantEffect) {
+            Objects.requireNonNull(variantEffect);
             this.variantEffect = variantEffect;
             return this;
         }
 
         public Builder annotations(List<TranscriptAnnotation> annotations) {
-            //TODO: can this be an ImmutableList.copyOf() ?
+            Objects.requireNonNull(annotations);
             this.annotations = annotations;
             return this;
         }
 
         public Builder geneSymbol(String geneSymbol) {
-            if (geneSymbol.equals(".")) {
-                this.geneSymbol = geneSymbol;
-            } else {
-                String[] tokens = geneSymbol.split(",");
-                this.geneSymbol = tokens[0];
+            Objects.requireNonNull(geneSymbol);
+            if (geneSymbol.isEmpty()) {
+                throw new IllegalArgumentException("Variant gene symbol cannot be empty");
             }
+            this.geneSymbol = inputOrfirstValueInCommaSeparatedString(geneSymbol);
             return this;
         }
 
-        public Builder geneId(int geneId) {
-            this.entrezGeneId = geneId;
+        private String inputOrfirstValueInCommaSeparatedString(String geneSymbol) {
+            int commaIndex = geneSymbol.indexOf(',');
+            return (commaIndex > -1) ? geneSymbol.substring(0, commaIndex) : geneSymbol;
+        }
+
+        public Builder geneId(String geneId) {
+            this.geneId = geneId;
             return this;
         }
 
@@ -756,12 +767,20 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
         }
 
         public VariantEvaluation build() {
-            if (chromosomeName == null) {
+            if (chromosomeName == null || chromosomeName.isEmpty()) {
                 chromosomeName = buildChromosomeName(chr);
             }
 
             if (variantContext == null) {
-                variantContext = buildVariantContext(chr, pos, ref, alt, phredScore);
+                // We don't check that the variant context agrees with the coordinates here as the variant context could
+                // have been split into different allelic variants so the positions and alleles could differ.
+                variantContext = buildVariantContext(chr, pos, ref, alt, phredScore, DEFAULT_SAMPLE_NAME);
+            }
+            // Should this be here? Would it be safer to validate for null/empty fields here? This is primarily for
+            // ease of testing. The TestAlleleFactory should fill in the missing fields for tests, although this
+            // replicates what buildVariantContext is doing for the SampleGenotypes
+            if (sampleGenotypes.isEmpty()) {
+                sampleGenotypes = SINGLE_SAMPLE_HET_GENOTYPE;
             }
             return new VariantEvaluation(this);
         }
@@ -769,7 +788,7 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
         /**
          * @return a generic one-based position variant context with a heterozygous genotype having no attributes.
          */
-        private VariantContext buildVariantContext(int chr, int pos, String ref, String alt, double qual) {
+        private VariantContext buildVariantContext(int chr, int pos, String ref, String alt, double qual, String sampleName) {
             Allele refAllele = Allele.create(ref, true);
             Allele altAllele = Allele.create(alt);
             List<Allele> alleles = Arrays.asList(refAllele, altAllele);
@@ -777,7 +796,7 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
             VariantContextBuilder vcBuilder = new VariantContextBuilder();
 
             // build Genotype
-            GenotypeBuilder gtBuilder = new GenotypeBuilder("sample").noAttributes();
+            GenotypeBuilder gtBuilder = new GenotypeBuilder(sampleName).noAttributes();
             //default to HETEROZYGOUS
             gtBuilder.alleles(alleles);
 

@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
  */
 package org.monarchinitiative.exomiser.core.filters;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.monarchinitiative.exomiser.core.model.VariantEvaluation;
 import org.monarchinitiative.exomiser.core.model.frequency.Frequency;
 import org.monarchinitiative.exomiser.core.model.frequency.FrequencyData;
@@ -56,7 +56,7 @@ public class KnownVariantFilterTest {
     }
 
     @Test
-    public void testRunFilter_ReturnsFailResultWhenFilteringVariantWithRsId() {
+    public void testRunFilterReturnsFailResultWhenFilteringVariantWithRsId() {
         FrequencyData frequencyData = FrequencyData.of(RsId.valueOf(12345));
         VariantEvaluation variantEvaluation = buildVariantWithFrequencyData(frequencyData);
         FilterResult filterResult = instance.runFilter(variantEvaluation);
@@ -64,7 +64,7 @@ public class KnownVariantFilterTest {
     }
     
     @Test
-    public void testRunFilter_ReturnsFailResultWhenFilteringVariantWithKnownFrequency() {
+    public void testRunFilterReturnsFailResultWhenFilteringVariantWithKnownFrequency() {
         FrequencyData frequencyData = FrequencyData.of(RsId.empty(), Frequency.valueOf(1f, FrequencySource.THOUSAND_GENOMES));
         VariantEvaluation variantEvaluation = buildVariantWithFrequencyData(frequencyData);
         FilterResult filterResult = instance.runFilter(variantEvaluation);
@@ -72,7 +72,7 @@ public class KnownVariantFilterTest {
     }
 
     @Test
-    public void testRunFilter_ReturnsPassResultWhenFilteringVariantWithNoRepresentationInDatabase() {
+    public void testRunFilterReturnsPassResultWhenFilteringVariantWithNoRepresentationInDatabase() {
         VariantEvaluation variantEvaluation = buildVariantWithFrequencyData(FrequencyData.empty());
         FilterResult filterResult = instance.runFilter(variantEvaluation);
         assertThat(filterResult, equalTo(PASS_RESULT));

@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -26,8 +26,8 @@
 package org.monarchinitiative.exomiser.core.filters;
 
 import de.charite.compbio.jannovar.mendel.ModeOfInheritance;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.monarchinitiative.exomiser.core.model.FilterStatus;
 import org.monarchinitiative.exomiser.core.model.Gene;
 import org.monarchinitiative.exomiser.core.model.VariantEvaluation;
@@ -59,7 +59,7 @@ public class SimpleGeneFilterRunnerTest {
     private Gene passGene;
     private Gene failGene;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         instance = new SimpleGeneFilterRunner();
         inheritanceFilter = new InheritanceFilter(PASS_MODE);
@@ -78,14 +78,14 @@ public class SimpleGeneFilterRunnerTest {
 
     private Gene makeGeneWithVariants(String geneSymbol, int geneId, Set<ModeOfInheritance> inheritanceModes) {
         Gene gene = new Gene(geneSymbol, geneId);
-        gene.setInheritanceModes(inheritanceModes);
+        gene.setCompatibleInheritanceModes(inheritanceModes);
         //Add some variants. For the purposes of this test these are required to
         //have the same inheritance mode as the gene to satisfy the unique bahaviour of the Inheritance filter. 
         //TODO: change this - mock filter required? We're not trying to test the functionality of the InheritanceFilter here.
         gene.addVariant(VariantEvaluation.builder(1, 1, "A", "T").build());
         gene.addVariant(VariantEvaluation.builder(1, 2, "G", "T").build());
         for (VariantEvaluation variantEvaluation : gene.getVariantEvaluations()) {
-            variantEvaluation.setInheritanceModes(inheritanceModes);
+            variantEvaluation.setCompatibleInheritanceModes(inheritanceModes);
         }
         return gene;
     }
@@ -124,17 +124,17 @@ public class SimpleGeneFilterRunnerTest {
     }
 
     @Test
-    public void testRun_MultipleFiltersOverGenes() {
+    public void testRunMultipleFiltersOverGenes() {
         assertVariantsUnfilteredAndDoNotPassFilter(genes, filters);
 
-        instance.run(filters, genes);
+        filters.forEach(filter -> instance.run(filter, genes));
 
         assertFilterStatus(passGene, filters, FilterStatus.PASSED);
         assertFilterStatus(failGene, filters, FilterStatus.FAILED);
     }
 
     @Test
-    public void testRun_SingleFilterOverGenes() {
+    public void testRunSingleFilterOverGenes() {
         assertVariantsUnfilteredAndDoNotPassFilter(genes, filters);
 
         instance.run(inheritanceFilter, genes);

@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -26,10 +26,7 @@
 package org.monarchinitiative.exomiser.core.analysis.util;
 
 import de.charite.compbio.jannovar.annotation.VariantEffect;
-import org.monarchinitiative.exomiser.core.model.Gene;
-import org.monarchinitiative.exomiser.core.model.TopologicalDomain;
-import org.monarchinitiative.exomiser.core.model.TranscriptAnnotation;
-import org.monarchinitiative.exomiser.core.model.VariantEvaluation;
+import org.monarchinitiative.exomiser.core.model.*;
 import org.monarchinitiative.exomiser.core.prioritisers.PriorityType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,7 +62,7 @@ public class GeneReassigner {
         this.tadIndex = tadIndex;
         this.allGenes = allGenes;
         this.priorityType = priorityType;
-        logger.info("Made new GeneReassigner for {}", priorityType);
+        logger.debug("Made new GeneReassigner for {}", priorityType);
     }
 
     public void reassignRegulatoryRegionVariantToMostPhenotypicallySimilarGeneInTad(VariantEvaluation variantEvaluation) {
@@ -82,27 +79,25 @@ public class GeneReassigner {
         double bestScore = prioritiserScore(currentlyAssignedGene);
         List<Gene> genesInTad = getGenesInTadForVariant(variantEvaluation);
 
-//        Optional<Gene> bestScoringGeneInTad = genesInTad.stream().max(Comparator.comparingDouble(this::prioritiserScore));
-//        logger.info("bestScoringGeneInTad {}", bestScoringGeneInTad);
-
         Gene geneWithHighestPhenotypeScore = null;
         for (Gene gene : genesInTad) {
             double geneScore = prioritiserScore(gene);
-//            logger.info("Gene {} in TAD has score {}", gene.getGeneSymbol(), geneScore);
             if (geneScore > bestScore) {
                 bestScore = geneScore;
                 geneWithHighestPhenotypeScore = gene;
             }
         }
+
         if (prioritiserScore(currentlyAssignedGene) == bestScore) {
             //don't move the assignment if there is nowhere better to go...
             return;
         }
+
         if (geneWithHighestPhenotypeScore != null) {
             //given the physical ranges of topologically associated domains, the annotations are likely to be meaningless once reassigned
             //but try to find any anything matching the new gene symbol.
             String geneSymbol = geneWithHighestPhenotypeScore.getGeneSymbol();
-            List<TranscriptAnnotation> matchingGeneAnnotations = getTranscriptAnnotationsMatchingGene(variantEvaluation.getAnnotations(), geneSymbol);
+            List<TranscriptAnnotation> matchingGeneAnnotations = getTranscriptAnnotationsMatchingGene(variantEvaluation.getTranscriptAnnotations(), geneSymbol);
             assignVariantToGene(variantEvaluation, geneWithHighestPhenotypeScore, matchingGeneAnnotations);
         }
     }
@@ -144,7 +139,7 @@ public class GeneReassigner {
                 .getGeneSymbol(), gene.getGeneSymbol());
 
         variant.setGeneSymbol(gene.getGeneSymbol());
-        variant.setEntrezGeneId(gene.getEntrezGeneID());
+        variant.setGeneId(gene.getGeneId());
         variant.setAnnotations(matchingGeneAnnotations);
     }
 
@@ -158,7 +153,7 @@ public class GeneReassigner {
         List<String> geneSymbols = new ArrayList<>();
         List<VariantEffect> variantEffects = new ArrayList<>();
         List<TranscriptAnnotation> newAnnotations = new ArrayList<>();
-        for (TranscriptAnnotation annotation : variantEvaluation.getAnnotations()) {
+        for (TranscriptAnnotation annotation : variantEvaluation.getTranscriptAnnotations()) {
             String geneSymbol = annotation.getGeneSymbol();
             geneSymbols.add(geneSymbol);
             variantEffects.add(annotation.getVariantEffect());
@@ -176,9 +171,6 @@ public class GeneReassigner {
             }
         }
 
-//        logger.info("variantEffects: {}", variantEffects);
-//        logger.info("newAnnotations: {}", newAnnotations);
-
         Gene currentlyAssignedGene = getCurrentlyAssignedGene(variantEvaluation);
         double bestScore = prioritiserScore(currentlyAssignedGene);
         Gene geneWithHighestPhenotypeScore = null;
@@ -194,7 +186,6 @@ public class GeneReassigner {
                 variantEffectForTopHit = variantEffects.get(i);
                 //bestAnnotation can be null here
                 bestAnnotation = newAnnotations.get(i);
-//                logger.info("Best annotation is {}", bestAnnotation);
             }
         }
         // Keep original annotation if possible - used in RegFilter later on and for display

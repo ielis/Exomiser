@@ -1,5 +1,53 @@
 # The Exomiser Command Line Executable - Changelog
 
+## 10.1.0 2018-05-09
+- Added support for filtering multiple intervals in the ```intervalFilter``` 
+    ```yaml
+    # single interval
+    intervalFilter: {interval: 'chr10:123256200-123256300'},
+    # or for multiple intervals:
+    intervalFilter: {intervals: ['chr10:123256200-123256300', 'chr10:123256290-123256350']},
+    # or using a BED file - NOTE this should be 0-based, Exomiser otherwise uses 1-based coordinates in line with VCF
+    intervalFilter: {bed: /full/path/to/bed_file.bed}
+    ```
+- Added support for ClinVar annotations - available in the 1805 variant data release. These will appear automatically and are reported for information only. 
+- Added ```JSON``` output format
+    ```yaml
+    outputFormats: [HTML, JSON, TSV_GENE, TSV_VARIANT, VCF]
+    ```
+
+## 10.0.1 2018-03-20
+- Updated HTSJDK library to fix ```TribbleException``` being thrown when trying to parse bgzipped VCF files
+
+## 10.0.0 2018-03-07
+- Deprecated extended cli options as these were less capable than the analysis file. Options are now ```--analysis``` or ```--analysis-batch``` only. See the ```.yml``` files in the ```examples``` directory for recommended scripts.
+- Exomiser can now analyse samples against multiple inheritance modes in one run using the new ```inheritanceModes``` field. This also allows variants to be considered under a model with a maximum frequency (%) cut-off. See example ```.yml``` files for more details. 
+     ```yaml
+        inheritanceModes: {
+             AUTOSOMAL_DOMINANT: 0.1,
+             AUTOSOMAL_RECESSIVE_HOM_ALT: 0.1,
+             AUTOSOMAL_RECESSIVE_COMP_HET: 2.0,
+             X_DOMINANT: 0.1,
+             X_RECESSIVE_HOM_ALT: 0.1,
+             X_RECESSIVE_COMP_HET: 2.0,
+             MITOCHONDRIAL: 0.2
+        }
+     ```
+- The old ```modeOfInheritance``` option will still work, although it will only run with default frequency cut-offs and may be removed in a later release, so please update your analyses.
+- The new ```1802_phenotype``` data release will not work on older exomiser versions as the PPI data is now shipped in a much more efficient storage format. This reduces the startup time to zero and reduces the memory footprint by approx 1 GB. We *highly* recommend you update older releases to the latest version in order to benefit from more recent phenotype data.
+- Default variant scores for ```FRAMESHIFT```, ```NONSENSE```, ```SPLICING```, ```STOPLOSS``` and ```STARTLOSS``` have been increased from 0.95 to the maximum score of 1.0 to reflect clinical interpretation of these variant consequences.
+
+## 9.0.1 2018-01-15
+- Now able to analyse ```MITOCHONDRIAL``` inheritance mode.
+
+## 9.0.0 2017-12-12
+- Exomiser can now analyse hg19 or hg38 samples - see ```application.properties``` for setup details.
+- Analysis file has new ```genomeAssembly:``` field - see example ```.yml``` files. Will default to hg19 if not specified.
+- Genomic and phenotypic data are now separated to allow for more frequent and smaller updates - see README.md for details
+- Variant alleles are now stored in a new highly-compressed data format enabling much smaller on-disk footprint with minimal loss of read performance.
+- New variant frequency data-sets: TOPMed, UK10K, gnomAD - see example ```.yml``` files.
+- New caching mechanism - see ```application.properties``` for setup details.
+
 ## 8.0.0 2017-08-08
 - See https://github.com/exomiser/Exomiser/projects/2 for a complete list of changes.
 - ```application.properties``` file has changed to use ```exomiser``` namespace prefix. Will allow property placeholder substitution - e.g. ```exomiser.property=foo``` can be used elsewhere in the file as ```${exomiser.property}```. Will support user-defined property values too. 

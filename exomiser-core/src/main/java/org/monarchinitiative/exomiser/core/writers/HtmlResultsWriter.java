@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -30,6 +30,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jdk7.Jdk7Module;
+import de.charite.compbio.jannovar.mendel.ModeOfInheritance;
 import org.monarchinitiative.exomiser.core.analysis.Analysis;
 import org.monarchinitiative.exomiser.core.analysis.AnalysisResults;
 import org.monarchinitiative.exomiser.core.filters.FilterReport;
@@ -42,7 +43,7 @@ import org.thymeleaf.context.Context;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -60,34 +61,33 @@ public class HtmlResultsWriter implements ResultsWriter {
 
     private static final OutputFormat OUTPUT_FORMAT = OutputFormat.HTML;
 
-    public HtmlResultsWriter(TemplateEngine templateEngine) {
+    public HtmlResultsWriter() {
         Locale.setDefault(Locale.UK);
-        this.templateEngine = templateEngine;
+        this.templateEngine = ThymeleafConfig.coreTemplateEngine();
     }
 
     @Override
-    public void writeFile(Analysis analysis, AnalysisResults analysisResults, OutputSettings settings) {
+    public void writeFile(ModeOfInheritance modeOfInheritance, Analysis analysis, AnalysisResults analysisResults, OutputSettings settings) {
         logger.info("Writing HTML results");
-        String outFileName = ResultsWriterUtils.makeOutputFilename(analysis.getVcfPath(), settings.getOutputPrefix(), OUTPUT_FORMAT);
+        String outFileName = ResultsWriterUtils.makeOutputFilename(analysis.getVcfPath(), settings.getOutputPrefix(), OUTPUT_FORMAT, modeOfInheritance);
         Path outFile = Paths.get(outFileName);
-        try (BufferedWriter writer = Files.newBufferedWriter(outFile, Charset.defaultCharset())) {
-            Context context = buildContext(analysis, analysisResults, settings);
+        try (BufferedWriter writer = Files.newBufferedWriter(outFile, StandardCharsets.UTF_8)) {
+            Context context = buildContext(modeOfInheritance, analysis, analysisResults, settings);
             templateEngine.process("results", context, writer);
         } catch (IOException ex) {
-            logger.error("Unable to write results to file {}.", outFileName, ex);
+            logger.error("Unable to write results to file {}", outFileName, ex);
         }
-        logger.info("{} results written to file {}.", OUTPUT_FORMAT, outFileName);
-
+        logger.info("{} ALL results written to file {}", OUTPUT_FORMAT, outFileName);
     }
 
     @Override
-    public String writeString(Analysis analysis, AnalysisResults analysisResults, OutputSettings settings) {
+    public String writeString(ModeOfInheritance modeOfInheritance, Analysis analysis, AnalysisResults analysisResults, OutputSettings settings) {
         logger.info("Writing HTML results");
-        Context context = buildContext(analysis, analysisResults, settings);
+        Context context = buildContext(modeOfInheritance, analysis, analysisResults, settings);
         return templateEngine.process("results", context);
     }
 
-    private Context buildContext(Analysis analysis, AnalysisResults analysisResults, OutputSettings settings) {
+    private Context buildContext(ModeOfInheritance modeOfInheritance, Analysis analysis, AnalysisResults analysisResults, OutputSettings settings) {
         Context context = new Context();
         //write the settings
         ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
@@ -96,34 +96,35 @@ public class HtmlResultsWriter implements ResultsWriter {
         mapper.configure(SerializationFeature.INDENT_OUTPUT, true);
         //avoids issues where there are oddities in the analysisSteps - none of these properly de/serialise at present
         mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-//        mapper.configure(SerializationFeature.WRITE_ENUMS_USING_TO_STRING, true);
-        String jsonSettings = "";
+        StringBuilder jsonSettings = new StringBuilder();
         try {
-            jsonSettings = mapper.writeValueAsString(analysis);
-            jsonSettings += mapper.writeValueAsString(settings);
+            jsonSettings.append(mapper.writeValueAsString(analysis));
+            jsonSettings.append(mapper.writeValueAsString(settings));
         } catch (JsonProcessingException ex) {
             logger.error("Unable to process JSON settings", ex);
         }
-        context.setVariable("settings", jsonSettings);
+        context.setVariable("settings", jsonSettings.toString());
 
         //make the user aware of any unanalysed variants
         List<VariantEvaluation> unAnalysedVarEvals = analysisResults.getUnAnnotatedVariantEvaluations();
         context.setVariable("unAnalysedVarEvals", unAnalysedVarEvals);
 
         //write out the analysis reports section
-        List<FilterReport> analysisStepReports = makeAnalysisStepReports(analysis, analysisResults);
+        List<FilterReport> analysisStepReports = ResultsWriterUtils.makeFilterReports(analysis, analysisResults);
         context.setVariable("filterReports", analysisStepReports);
         //write out the variant type counters
-        List<VariantEffectCount> variantTypeCounters = makeVariantEffectCounters(analysisResults.getVariantEvaluations());
         List<String> sampleNames = analysisResults.getSampleNames();
+        List<VariantEffectCount> variantTypeCounters = ResultsWriterUtils.makeVariantEffectCounters(sampleNames, analysisResults
+                .getVariantEvaluations());
         String sampleName = "Anonymous";
-        if (!analysisResults.getProbandSampleName().isEmpty()) {
-            sampleName = analysisResults.getProbandSampleName();
+        if (!analysis.getProbandSampleName().isEmpty()) {
+            sampleName = analysis.getProbandSampleName();
         }
         context.setVariable("sampleName", sampleName);
         context.setVariable("sampleNames", sampleNames);
         context.setVariable("variantTypeCounters", variantTypeCounters);
 
+        context.setVariable("modeOfInheritance", modeOfInheritance);
         List<Gene> passedGenes = ResultsWriterUtils.getMaxPassedGenes(analysisResults.getGenes(), settings.getNumberOfGenesToShow());
         context.setVariable("genes", passedGenes);
 
@@ -131,17 +132,9 @@ public class HtmlResultsWriter implements ResultsWriter {
         // For the time being we're going to maintain the original behaviour (UCSC)
         // Need to wire it up through the system or it might be easiest to autodetect this from the transcripts of passed variants.
         // One of UCSC, ENSEMBL or REFSEQ
-        context.setVariable("transcriptDb", "UCSC");
+        context.setVariable("transcriptDb", "ENSEMBL");
         context.setVariable("variantRankComparator", new VariantEvaluation.RankBasedComparator());
         return context;
-    }
-
-    private List<VariantEffectCount> makeVariantEffectCounters(List<VariantEvaluation> variantEvaluations) {
-        return ResultsWriterUtils.makeVariantEffectCounters(variantEvaluations);
-    }
-
-    private List<FilterReport> makeAnalysisStepReports(Analysis analysis, AnalysisResults analysisResults) {
-        return ResultsWriterUtils.makeFilterReports(analysis, analysisResults);
     }
 
     //TODO:

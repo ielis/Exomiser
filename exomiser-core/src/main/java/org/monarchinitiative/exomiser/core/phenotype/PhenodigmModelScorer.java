@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -36,7 +36,7 @@ import java.util.Set;
  * @since 8.0.0
  * @author Jules Jacobsen <j.jacobsen@qmul.ac.uk>
  */
-public class PhenodigmModelScorer implements ModelScorer {
+public class PhenodigmModelScorer<T extends Model> implements ModelScorer<T> {
 
     private static final Logger logger = LoggerFactory.getLogger(PhenodigmModelScorer.class);
 
@@ -81,9 +81,9 @@ public class PhenodigmModelScorer implements ModelScorer {
      *
      * @param phenotypeMatcher The HP to HP PhenotypeMatches for the query Phenotypes.
      */
-    public static PhenodigmModelScorer forSameSpecies(PhenotypeMatcher phenotypeMatcher) {
+    public static <T extends Model> PhenodigmModelScorer<T> forSameSpecies(PhenotypeMatcher phenotypeMatcher) {
         int numQueryPhenotypes = phenotypeMatcher.getQueryTerms().size();
-        return new PhenodigmModelScorer(phenotypeMatcher, numQueryPhenotypes);
+        return new PhenodigmModelScorer<>(phenotypeMatcher, numQueryPhenotypes);
     }
 
     /**
@@ -92,9 +92,9 @@ public class PhenodigmModelScorer implements ModelScorer {
      *
      * @param phenotypeMatcher The HP to MP/ZP PhenotypeMatches for the query Phenotypes.
      */
-    public static PhenodigmModelScorer forSingleCrossSpecies(PhenotypeMatcher phenotypeMatcher) {
+    public static <T extends Model> PhenodigmModelScorer<T> forSingleCrossSpecies(PhenotypeMatcher phenotypeMatcher) {
         int numQueryPhenotypes = phenotypeMatcher.getBestPhenotypeMatches().size();
-        return new PhenodigmModelScorer(phenotypeMatcher, numQueryPhenotypes);
+        return new PhenodigmModelScorer<>(phenotypeMatcher, numQueryPhenotypes);
     }
 
     /**
@@ -104,33 +104,32 @@ public class PhenodigmModelScorer implements ModelScorer {
      * @param referenceOrganismQueryPhenotypeMatch {@link QueryPhenotypeMatch} for the reference organism - this should be for the HP-HP hits.
      * @param phenotypeMatcher                     the {@link PhenotypeMatcher} for the relevant organism i.e. HP-HP, HP-MP or HP-ZP matches.
      */
-    public static PhenodigmModelScorer forMultiCrossSpecies(QueryPhenotypeMatch referenceOrganismQueryPhenotypeMatch, PhenotypeMatcher phenotypeMatcher) {
+    public static <T extends Model> PhenodigmModelScorer<T> forMultiCrossSpecies(QueryPhenotypeMatch referenceOrganismQueryPhenotypeMatch, PhenotypeMatcher phenotypeMatcher) {
         int numQueryPhenotypes = referenceOrganismQueryPhenotypeMatch.getQueryTerms().size();
-        return new PhenodigmModelScorer(referenceOrganismQueryPhenotypeMatch, phenotypeMatcher, numQueryPhenotypes);
+        return new PhenodigmModelScorer<>(referenceOrganismQueryPhenotypeMatch, phenotypeMatcher, numQueryPhenotypes);
     }
 
     private void logOrganismPhenotypeMatches() {
-        logger.info("Best {} phenotype matches:", organismPhenotypeMatcher.getOrganism());
+        logger.debug("Best {} phenotype matches:", organismPhenotypeMatcher.getOrganism());
         Map<PhenotypeTerm, Set<PhenotypeMatch>> termPhenotypeMatches = organismPhenotypeMatcher.getTermPhenotypeMatches();
         for (Map.Entry<PhenotypeTerm, Set<PhenotypeMatch>> entry : termPhenotypeMatches.entrySet()) {
             PhenotypeTerm queryTerm = entry.getKey();
             Set<PhenotypeMatch> matches = entry.getValue();
             if (matches.isEmpty()) {
-                logger.info("{}-NOT MATCHED", queryTerm.getId());
+                logger.debug("{}-NOT MATCHED", queryTerm.getId());
             } else {
-                PhenotypeMatch bestMatch = matches.stream()
+                matches.stream()
                         .max(Comparator.comparingDouble(PhenotypeMatch::getScore))
-                        .get();
-                logger.info("{}-{}={}", queryTerm.getId(), bestMatch.getMatchPhenotypeId(), bestMatch.getScore());
+                        .ifPresent(bestMatch -> logger.debug("{}-{}={}", queryTerm.getId(), bestMatch.getMatchPhenotypeId(), bestMatch.getScore()));
             }
         }
         QueryPhenotypeMatch organismQueryPhenotypeMatch = organismPhenotypeMatcher.getQueryPhenotypeMatch();
-        logger.info("bestMaxScore={} bestAvgScore={}", organismQueryPhenotypeMatch.getMaxMatchScore(), organismQueryPhenotypeMatch
+        logger.debug("bestMaxScore={} bestAvgScore={}", organismQueryPhenotypeMatch.getMaxMatchScore(), organismQueryPhenotypeMatch
                 .getBestAvgScore());
     }
 
     @Override
-    public ModelPhenotypeMatch scoreModel(Model model) {
+    public ModelPhenotypeMatch<T> scoreModel(T model) {
         PhenodigmMatchRawScore rawModelScore = organismPhenotypeMatcher.matchPhenotypeIds(model.getPhenotypeIds());
         double score = calculateCombinedScore(rawModelScore);
         return ModelPhenotypeMatch.of(score, model, rawModelScore.getBestPhenotypeMatches());

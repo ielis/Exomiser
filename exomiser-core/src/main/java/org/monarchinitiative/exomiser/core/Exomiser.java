@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -26,6 +26,7 @@
 package org.monarchinitiative.exomiser.core;
 
 import org.monarchinitiative.exomiser.core.analysis.*;
+import org.monarchinitiative.exomiser.core.genome.GenomeAssembly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,8 +34,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * This is the main entry point for analysing data using the Exomiser. An {@link Analysis}
- * should be build using either a {@link Settings} and the {@link SettingsParser} or with an {@link AnalysisParser}
- * or programmtically using the {@link AnalysisBuilder}
+ * should be built with an {@link AnalysisParser} or programmatically using the {@link AnalysisBuilder}
  *
  * @author Jules Jacobsen <jules.jacobsen@sanger.ac.uk>
  */
@@ -55,9 +55,12 @@ public class Exomiser {
     }
 
     public AnalysisResults run(Analysis analysis) {
+        //TODO: This might be better returning a Mono.just(analysisRunner.run(analysis)) and running the job on an async queue, or a CompletableFuture
+        //or maybe better keep this and add a runAsync(Analysis) method.
+        GenomeAssembly genomeAssembly = analysis.getGenomeAssembly();
         AnalysisMode analysisMode = analysis.getAnalysisMode();
-        logger.info("Running analysis with mode: {}", analysisMode);
-        AnalysisRunner analysisRunner = analysisFactory.getAnalysisRunnerForMode(analysisMode);
+        logger.info("Running analysis using {} assembly with mode: {}", genomeAssembly, analysisMode);
+        AnalysisRunner analysisRunner = analysisFactory.getAnalysisRunner(genomeAssembly, analysisMode);
         return analysisRunner.run(analysis);
     }
 

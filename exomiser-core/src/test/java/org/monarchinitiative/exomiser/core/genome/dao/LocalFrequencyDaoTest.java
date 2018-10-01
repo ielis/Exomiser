@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -21,12 +21,12 @@
 package org.monarchinitiative.exomiser.core.genome.dao;
 
 import htsjdk.tribble.readers.TabixReader;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.monarchinitiative.exomiser.core.model.VariantEvaluation;
 import org.monarchinitiative.exomiser.core.model.frequency.Frequency;
 import org.monarchinitiative.exomiser.core.model.frequency.FrequencyData;
@@ -39,7 +39,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 /**
  * @author Jules Jacobsen <j.jacobsen@qmul.ac.uk>
  */
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
 public class LocalFrequencyDaoTest {
 
     private LocalFrequencyDao instance;
@@ -47,7 +47,7 @@ public class LocalFrequencyDaoTest {
     @Mock
     private TabixReader tabixReader;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         TabixDataSource tabixDataSource = new TabixReaderAdaptor(tabixReader);
         instance = new LocalFrequencyDao(tabixDataSource);
@@ -71,7 +71,7 @@ public class LocalFrequencyDaoTest {
     //non-autosomes
     //X 12345   AT   G   0.02  (an AT->G deletion on chrX at position 12345 with frequency of 0.02%)
     //Y 12345   AT   G   0.02  (an AT->G deletion on chrY at position 12345 with frequency of 0.02%)
-    //M 12345   AT   G   0.02  (an AT->G deletion on chrM at position 12345 with frequency of 0.02%)
+    //MT 12345   AT   G   0.02  (an AT->G deletion on chrM at position 12345 with frequency of 0.02%)
 
     @Test
     public void variantNotInFile() {
@@ -108,8 +108,8 @@ public class LocalFrequencyDaoTest {
 
     @Test
     public void testMitochondrialSnp() {
-        Mockito.when(tabixReader.query("M:12345-12345"))
-                .thenReturn(MockTabixIterator.of("M\t12345\tA\tT\t23.0"));
+        Mockito.when(tabixReader.query("MT:12345-12345"))
+                .thenReturn(MockTabixIterator.of("MT\t12345\tA\tT\t23.0"));
 
         assertThat(instance.getFrequencyData(variant(25, 12345, "A", "T")), equalTo(localFrequencyData(23.0f)));
     }

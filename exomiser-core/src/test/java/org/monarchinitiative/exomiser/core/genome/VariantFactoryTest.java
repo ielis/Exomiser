@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,30 +25,28 @@
  */
 package org.monarchinitiative.exomiser.core.genome;
 
+import com.google.common.collect.ImmutableMap;
 import de.charite.compbio.jannovar.annotation.VariantEffect;
 import de.charite.compbio.jannovar.data.JannovarData;
-import htsjdk.tribble.TribbleException;
 import htsjdk.variant.variantcontext.Genotype;
 import htsjdk.variant.variantcontext.GenotypeType;
 import htsjdk.variant.variantcontext.GenotypesContext;
 import htsjdk.variant.variantcontext.VariantContext;
-import htsjdk.variant.vcf.VCFCodec;
-import htsjdk.variant.vcf.VCFHeader;
-import htsjdk.variant.vcf.VCFHeaderVersion;
-import org.junit.Test;
-import org.monarchinitiative.exomiser.core.model.VariantEvaluation;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+import org.monarchinitiative.exomiser.core.genome.jannovar.JannovarDataProtoSerialiser;
+import org.monarchinitiative.exomiser.core.model.*;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.toList;
-import static org.hamcrest.CoreMatchers.*;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 /**
  * @author Jules Jacobsen <jules.jacobsen@sanger.ac.uk>
@@ -58,57 +56,25 @@ public class VariantFactoryTest {
     private final VariantFactory instance;
 
     public VariantFactoryTest() {
-        JannovarData jannovarData = TestFactory.buildDefaultJannovarData();
-        instance = new VariantFactory(jannovarData);
+        VariantAnnotator variantAnnotator = TestFactory.buildDefaultVariantAnnotator();
+        instance = new VariantFactoryImpl(variantAnnotator);
     }
 
     private Consumer<VariantEvaluation> printVariant() {
         return variant -> {
             GenotypesContext genotypes = variant.getVariantContext().getGenotypes();
             List<GenotypeType> genotypeTypes = genotypes.stream().map(Genotype::getType).collect(toList());
-            System.out.printf("%s %s %s %s %s %s %s offExome=%s gene=%s %s%n", variant.getChromosome(), variant.getPosition(), variant
-                    .getRef(), variant.getAlt(), variant.getGenotypeString(), genotypes, genotypeTypes, variant.isOffExome(), variant
-                    .getGeneSymbol(), variant.getVariantContext());
+            System.out.printf("%s %s %s %s %s %s %s gene={%s %s} %s%n", variant.getChromosome(), variant.getPosition(), variant
+                            .getRef(), variant.getAlt(), variant.getGenotypeString(), genotypes, genotypeTypes,
+                    variant.getGeneSymbol(), variant.getGeneId(), variant.getVariantContext());
         };
     }
 
     @Test
-    public void alternateConstructor() {
-        VariantFactory alternateFactory = new VariantFactory(TestFactory.buildDefaultJannovarData());
-        assertThat(alternateFactory, notNullValue());
-    }
-
-    @Test(expected = TribbleException.class)
-    public void testCreateVariantContexts_NonExistentFile() {
-        Path vcfPath = Paths.get("src/test/resources/wibble.vcf");
-        instance.streamVariantContexts(vcfPath);
-    }
-
-    @Test
-    public void testCreateVariantContexts_SingleAlleles() {
+    public void testStreamCreateVariantsSingleAlleles() {
         Path vcfPath = Paths.get("src/test/resources/smallTest.vcf");
         long numVariants;
-        try (Stream<VariantContext> variantStream = instance.streamVariantContexts(vcfPath)) {
-            numVariants = variantStream.count();
-        }
-        assertThat(numVariants, equalTo(3L));
-    }
-
-    @Test
-    public void testStreamVariantContexts_SingleAlleles() {
-        Path vcfPath = Paths.get("src/test/resources/smallTest.vcf");
-        List<VariantContext> variants = instance.streamVariantContexts(vcfPath)
-                .filter(variantContext -> (variantContext.getContig().equals("1")))
-                .collect(toList());
-
-        assertThat(variants.size(), equalTo(3));
-    }
-
-    @Test
-    public void testStreamCreateVariants_SingleAlleles() {
-        Path vcfPath = Paths.get("src/test/resources/smallTest.vcf");
-        long numVariants;
-        try (Stream<VariantEvaluation> variants = instance.streamVariantEvaluations(vcfPath)) {
+        try (Stream<VariantEvaluation> variants = instance.createVariantEvaluations(vcfPath)) {
             numVariants = variants
                     .peek(printVariant())
                     .count();
@@ -117,91 +83,86 @@ public class VariantFactoryTest {
     }
 
     @Test
-    public void testCreateVariantContexts_MultipleAlleles() {
-        Path vcfPath = Paths.get("src/test/resources/altAllele.vcf");
-        List<VariantContext> variants = instance.streamVariantContexts(vcfPath).collect(toList());
-        assertThat(variants.size(), equalTo(1));
-    }
-
-    @Test
-    public void testCreateVariantContexts_MultipleAlleles_DiferentSingleSampleGenotypes() {
+    public void testCreateVariantContextsMultipleAllelesDiferentSingleSampleGenotypes() {
         Path vcfPath = Paths.get("src/test/resources/multiAlleleGenotypes.vcf");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(vcfPath).collect(toList());
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(vcfPath).collect(toList());
         variants.forEach(printVariant());
         assertThat(variants.size(), equalTo(11));
     }
 
     @Test
-    public void testCreateVariants_SingleAlleles() {
+    public void testCreateVariantsSingleAlleles() {
         Path vcfPath = Paths.get("src/test/resources/smallTest.vcf");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(vcfPath).collect(toList());
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(vcfPath).collect(toList());
         variants.forEach(printVariant());
         assertThat(variants.size(), equalTo(3));
 
     }
 
     @Test
-    public void testCreateVariants_MultipleAllelesProduceOneVariantPerAllele() {
+    public void testCreateVariantsMultipleAllelesProduceOneVariantPerAllele() {
         Path vcfPath = Paths.get("src/test/resources/altAllele.vcf");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(vcfPath).collect(toList());
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(vcfPath).collect(toList());
         variants.forEach(printVariant());
         assertThat(variants.size(), equalTo(2));
     }
 
     @Test
-    public void testCreateVariants_MultipleAlleles_SingleSampleGenotypesShouldOnlyReturnRepresentedVariationFromGenotype() {
+    public void testCreateVariantsMultipleAllelesSingleSampleGenotypesShouldOnlyReturnRepresentedVariationFromGenotype() {
         Path vcfPath = Paths.get("src/test/resources/multiAlleleGenotypes.vcf");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(vcfPath).collect(toList());
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(vcfPath).collect(toList());
         variants.forEach(printVariant());
         assertThat(variants.size(), equalTo(11));
     }
 
     @Test
-    public void testCreateVariants_NoVariantAnnotationsProduceVariantEvaluationsWithNoAnnotations() {
+    public void testCreateVariantsNoVariantAnnotationsProduceVariantEvaluationsWithNoAnnotations() {
         Path vcfPath = Paths.get("src/test/resources/noAnnotations.vcf");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(vcfPath).collect(toList());
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(vcfPath).collect(toList());
         assertThat(variants.size(), equalTo(2));
 
         for (VariantEvaluation variant : variants) {
             System.out.println(variant.getChromosomeName() + " " + variant);
-            assertThat(variant.hasAnnotations(), is(false));
+            assertThat(variant.hasTranscriptAnnotations(), is(false));
         }
     }
 
     @Test
-    public void testStreamVariantEvaluations_MultipleAlleles_DifferentSingleSampleGenotypes() {
+    public void testStreamVariantEvaluationsMultipleAllelesDifferentSingleSampleGenotypes() {
         Path vcfPath = Paths.get("src/test/resources/multiAlleleGenotypes.vcf");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(vcfPath).collect(toList());
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(vcfPath).collect(toList());
         assertThat(variants.size(), equalTo(11));
     }
 
     @Test
     public void testKnownSingleSampleSnp() {
-        Stream<VariantContext> variantContexts = VcfParser.forSamples("Sample")
-                .parse("10\t123256215\t.\tT\tG\t100\tPASS\tGENE=FGFR2;INHERITANCE=AD;MIM=101600\tGT\t1|0");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(variantContexts)
+        Stream<VariantContext> variantContexts = TestVcfParser.forSamples("Sample")
+                .parseVariantContext("10\t123256215\t.\tT\tG\t100\tPASS\tGENE=FGFR2;INHERITANCE=AD;MIM=101600\tGT\t1|0");
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(variantContexts)
                 .peek(printVariant())
                 .collect(toList());
         assertThat(variants.size(), equalTo(1));
         VariantEvaluation variantEvaluation = variants.get(0);
         System.out.println(variantEvaluation);
+
         assertThat(variantEvaluation.getChromosome(), equalTo(10));
         assertThat(variantEvaluation.getChromosomeName(), equalTo("10"));
         assertThat(variantEvaluation.getPosition(), equalTo(123256215));
         assertThat(variantEvaluation.getRef(), equalTo("T"));
         assertThat(variantEvaluation.getAlt(), equalTo("G"));
-        assertThat(variantEvaluation.hasAnnotations(), is(true));
-        System.out.println(variantEvaluation.getAnnotations());
-        assertThat(variantEvaluation.getEntrezGeneId(), equalTo(2263));
+        assertThat(variantEvaluation.hasTranscriptAnnotations(), is(true));
+        System.out.println(variantEvaluation.getTranscriptAnnotations());
+        assertThat(variantEvaluation.getGeneId(), equalTo("2263"));
         assertThat(variantEvaluation.getGeneSymbol(), equalTo("FGFR2"));
         assertThat(variantEvaluation.getVariantEffect(), equalTo(VariantEffect.MISSENSE_VARIANT));
+        assertThat(variantEvaluation.getSampleGenotypes(), equalTo(ImmutableMap.of("Sample", SampleGenotype.phased(AlleleCall.ALT, AlleleCall.REF))));
     }
 
     @Test
     public void testUnKnownSingleSampleSnp() {
-        Stream<VariantContext> variantContexts = VcfParser.forSamples("Sample")
-                .parse("UNKNOWN\t12345\t.\tT\tC\t0\tPASS\t.\tGT:DP\t0/1:21");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(variantContexts)
+        Stream<VariantContext> variantContexts = TestVcfParser.forSamples("Sample")
+                .parseVariantContext("UNKNOWN\t12345\t.\tT\tC\t0\tPASS\t.\tGT:DP\t0/1:21");
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(variantContexts)
                 .peek(printVariant())
                 .collect(toList());
         assertThat(variants.size(), equalTo(1));
@@ -212,11 +173,12 @@ public class VariantFactoryTest {
         assertThat(variantEvaluation.getPosition(), equalTo(12345));
         assertThat(variantEvaluation.getRef(), equalTo("T"));
         assertThat(variantEvaluation.getAlt(), equalTo("C"));
-        assertThat(variantEvaluation.hasAnnotations(), is(false));
-        System.out.println(variantEvaluation.getAnnotations());
-        assertThat(variantEvaluation.getEntrezGeneId(), equalTo(-1));
+        assertThat(variantEvaluation.hasTranscriptAnnotations(), is(false));
+        System.out.println(variantEvaluation.getTranscriptAnnotations());
+        assertThat(variantEvaluation.getGeneId(), equalTo(""));
         assertThat(variantEvaluation.getGeneSymbol(), equalTo("."));
         assertThat(variantEvaluation.getVariantEffect(), equalTo(VariantEffect.SEQUENCE_VARIANT));
+        assertThat(variantEvaluation.getSampleGenotypes(), equalTo(ImmutableMap.of("Sample", SampleGenotype.of(AlleleCall.REF, AlleleCall.ALT))));
     }
 
     /**
@@ -224,9 +186,9 @@ public class VariantFactoryTest {
      */
     @Test
     public void testSingleSampleDeletion() {
-        Stream<VariantContext> variantContexts = VcfParser.forSamples("Sample")
-                .parse("1\t123256213\t.\tCA\tC\t100.15\tPASS\tGENE=RBM8A\tGT:DP\t0/1:33");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(variantContexts)
+        Stream<VariantContext> variantContexts = TestVcfParser.forSamples("Sample")
+                .parseVariantContext("1\t123256213\t.\tCA\tC\t100.15\tPASS\tGENE=RBM8A\tGT:DP\t0/1:33");
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(variantContexts)
                 .peek(printVariant())
                 .collect(toList());
         assertThat(variants.size(), equalTo(1));
@@ -237,17 +199,19 @@ public class VariantFactoryTest {
         assertThat(variantEvaluation.getPosition(), equalTo(123256213));
         assertThat(variantEvaluation.getRef(), equalTo("CA"));
         assertThat(variantEvaluation.getAlt(), equalTo("C"));
-        assertThat(variantEvaluation.hasAnnotations(), is(true));
-        System.out.println(variantEvaluation.getAnnotations());
-        assertThat(variantEvaluation.getEntrezGeneId(), equalTo(9939));
+        assertThat(variantEvaluation.hasTranscriptAnnotations(), is(true));
+        System.out.println(variantEvaluation.getTranscriptAnnotations());
+        assertThat(variantEvaluation.getGeneId(), equalTo("9939"));
         assertThat(variantEvaluation.getGeneSymbol(), equalTo("RBM8A"));
         assertThat(variantEvaluation.getVariantEffect(), equalTo(VariantEffect.INTERGENIC_VARIANT));
+        assertThat(variantEvaluation.getSampleGenotypes(), equalTo(ImmutableMap.of("Sample", SampleGenotype.of(AlleleCall.REF, AlleleCall.ALT))));
     }
 
     @Test
     public void testSnpWithNoGenotypeReturnsNothing() {
-        Stream<VariantContext> variantContexts = VcfParser.forSamples().parse("UNKNOWN\t12345\t.\tT\tC\t0\tPASS\t.");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(variantContexts)
+        Stream<VariantContext> variantContexts = TestVcfParser.forSamples()
+                .parseVariantContext("UNKNOWN\t12345\t.\tT\tC\t0\tPASS\t.");
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(variantContexts)
                 .peek(printVariant())
                 .collect(toList());
         assertThat(variants.isEmpty(), is(true));
@@ -255,30 +219,33 @@ public class VariantFactoryTest {
 
     @Test
     public void testSingleSampleHomVar() {
-        Stream<VariantContext> variantContexts = VcfParser.forSamples("Sample")
-                .parse("1\t120612040\t.\tT\tTCCGCCG\t258.62\tPASS\t.\tGT\t1/1");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(variantContexts)
+        Stream<VariantContext> variantContexts = TestVcfParser.forSamples("Sample")
+                .parseVariantContext("1\t120612040\t.\tT\tTCCGCCG\t258.62\tPASS\t.\tGT\t1/1");
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(variantContexts)
                 .peek(printVariant())
                 .collect(toList());
         assertThat(variants.size(), equalTo(1));
+        VariantEvaluation variant = variants.get(0);
+        assertThat(variant.getSampleGenotypes(), equalTo(ImmutableMap.of("Sample", SampleGenotype.of(AlleleCall.ALT, AlleleCall.ALT))));
     }
 
     @Test
     public void testSingleSampleMultiPosition() {
-        Stream<VariantContext> variantContexts = VcfParser.forSamples("Sample")
-                .parse("1\t120612040\t.\tT\tTCCGCCG,TCCTCCGCCG\t258.62\tPASS\t.\tGT\t1/2");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(variantContexts)
+        Stream<VariantContext> variantContexts = TestVcfParser.forSamples("Sample")
+                .parseVariantContext("1\t120612040\t.\tT\tTCCGCCG,TCCTCCGCCG\t258.62\tPASS\t.\tGT\t1/2");
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(variantContexts)
                 .peek(printVariant())
                 .collect(toList());
-        //TODO: Should this really be 1? Genotype is [Sample TCCGCCG/TCCTCCGCCG]
         assertThat(variants.size(), equalTo(2));
+        assertThat(variants.get(0).getSampleGenotypes(), equalTo(ImmutableMap.of("Sample", SampleGenotype.of(AlleleCall.OTHER_ALT, AlleleCall.ALT))));
+        assertThat(variants.get(1).getSampleGenotypes(), equalTo(ImmutableMap.of("Sample", SampleGenotype.of(AlleleCall.OTHER_ALT, AlleleCall.ALT))));
     }
 
     @Test
     public void testMultiSampleMultiPositionAlleleIsSplitIntoAlternateAlleles() {
-        Stream<VariantContext> variantContexts = VcfParser.forSamples("Sample1", "Sample2")
-                .parse("1\t120612040\t.\tT\tTCCGCCG,TCCTCCGCCG\t258.62\tPASS\t.\tGT\t0/1\t0/2");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(variantContexts)
+        Stream<VariantContext> variantContexts = TestVcfParser.forSamples("Sample1", "Sample2")
+                .parseVariantContext("1\t120612040\t.\tT\tTCCGCCG,TCCTCCGCCG\t258.62\tPASS\t.\tGT\t0/1\t0/2");
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(variantContexts)
                 .peek(printVariant())
                 .collect(toList());
         assertThat(variants.size(), equalTo(2));
@@ -289,12 +256,17 @@ public class VariantFactoryTest {
         assertThat(firstAllele.getPosition(), equalTo(120612040));
         assertThat(firstAllele.getRef(), equalTo("T"));
         assertThat(firstAllele.getAlt(), equalTo("TCCGCCG"));
-        assertThat(firstAllele.hasAnnotations(), is(true));
-        System.out.println(firstAllele.getAnnotations());
-        assertThat(firstAllele.getEntrezGeneId(), equalTo(9939));
+        assertThat(firstAllele.hasTranscriptAnnotations(), is(true));
+        System.out.println(firstAllele.getTranscriptAnnotations());
+        assertThat(firstAllele.getGeneId(), equalTo("9939"));
         assertThat(firstAllele.getGeneSymbol(), equalTo("RBM8A"));
         assertThat(firstAllele.getVariantEffect(), equalTo(VariantEffect.INTERGENIC_VARIANT));
-
+        assertThat(firstAllele.getSampleGenotypes(), equalTo(
+                ImmutableMap.of(
+                        "Sample1", SampleGenotype.of(AlleleCall.REF, AlleleCall.ALT),
+                        "Sample2", SampleGenotype.of(AlleleCall.REF, AlleleCall.OTHER_ALT)
+                ))
+        );
 
         VariantEvaluation secondAllele = variants.get(1);
         System.out.println(secondAllele);
@@ -303,18 +275,24 @@ public class VariantFactoryTest {
         assertThat(secondAllele.getPosition(), equalTo(120612040));
         assertThat(secondAllele.getRef(), equalTo("T"));
         assertThat(secondAllele.getAlt(), equalTo("TCCTCCGCCG"));
-        assertThat(secondAllele.hasAnnotations(), is(true));
-        System.out.println(secondAllele.getAnnotations());
-        assertThat(secondAllele.getEntrezGeneId(), equalTo(9939));
+        assertThat(secondAllele.hasTranscriptAnnotations(), is(true));
+        System.out.println(secondAllele.getTranscriptAnnotations());
+        assertThat(secondAllele.getGeneId(), equalTo("9939"));
         assertThat(secondAllele.getGeneSymbol(), equalTo("RBM8A"));
         assertThat(secondAllele.getVariantEffect(), equalTo(VariantEffect.INTERGENIC_VARIANT));
+        assertThat(secondAllele.getSampleGenotypes(), equalTo(
+                ImmutableMap.of(
+                        "Sample1", SampleGenotype.of(AlleleCall.REF, AlleleCall.OTHER_ALT),
+                        "Sample2", SampleGenotype.of(AlleleCall.REF, AlleleCall.ALT)
+                ))
+        );
     }
 
     @Test
     public void testMultiSampleMultiPositionOnlyOneAltAlleleIsPresentInSamplesProducesOneVariantEvaluation() {
-        Stream<VariantContext> variantContexts = VcfParser.forSamples("Sample1", "Sample2")
-                .parse("1\t120612040\t.\tT\tTCCGCCG,TCCTCCGCCG\t258.62\tPASS\t.\tGT\t0/1\t0/1");
-        List<VariantEvaluation> variants = instance.streamVariantEvaluations(variantContexts)
+        Stream<VariantContext> variantContexts = TestVcfParser.forSamples("Sample1", "Sample2")
+                .parseVariantContext("1\t120612040\t.\tT\tTCCGCCG,TCCTCCGCCG\t258.62\tPASS\t.\tGT\t0/1\t0/1");
+        List<VariantEvaluation> variants = instance.createVariantEvaluations(variantContexts)
                 .peek(printVariant())
                 .collect(toList());
         assertThat(variants.size(), equalTo(1));
@@ -325,37 +303,81 @@ public class VariantFactoryTest {
         assertThat(variantEvaluation.getPosition(), equalTo(120612040));
         assertThat(variantEvaluation.getRef(), equalTo("T"));
         assertThat(variantEvaluation.getAlt(), equalTo("TCCGCCG"));
-        assertThat(variantEvaluation.hasAnnotations(), is(true));
-        System.out.println(variantEvaluation.getAnnotations());
-        assertThat(variantEvaluation.getEntrezGeneId(), equalTo(9939));
+        assertThat(variantEvaluation.hasTranscriptAnnotations(), is(true));
+        System.out.println(variantEvaluation.getTranscriptAnnotations());
+        assertThat(variantEvaluation.getGeneId(), equalTo("9939"));
         assertThat(variantEvaluation.getGeneSymbol(), equalTo("RBM8A"));
         assertThat(variantEvaluation.getVariantEffect(), equalTo(VariantEffect.INTERGENIC_VARIANT));
+        assertThat(variantEvaluation.getSampleGenotypes(), equalTo(
+                ImmutableMap.of(
+                        "Sample1", SampleGenotype.of(AlleleCall.REF, AlleleCall.ALT),
+                        "Sample2", SampleGenotype.of(AlleleCall.REF, AlleleCall.ALT)
+                ))
+        );
     }
 
-    private static class VcfParser {
+    /**
+     * Comparative performance test for loading a full genome. Ignored by default as this takes a few minutes.
+     */
+    @Disabled
+    @Test
+    public void testGenome() {
 
-        private final VCFCodec vcfCodec;
+        VariantAnnotator variantAnnotator = new StubVariantAnnotator();
+        VariantFactory variantFactory = new VariantFactoryImpl(variantAnnotator);
 
-        static VcfParser forSamples(String... sampleNames) {
-            return new VcfParser(sampleNames);
+        Path vcfPath = Paths.get("C:/Users/hhx640/Documents/exomiser-cli-dev/examples/NA19722_601952_AUTOSOMAL_RECESSIVE_POMP_13_29233225_5UTR_38.vcf.gz");
+        long numVariants;
+        try (Stream<VariantEvaluation> variants = variantFactory.createVariantEvaluations(vcfPath)) {
+            numVariants = variants
+                    .count();
+        }
+        System.out.println("Read " + numVariants + " variants");
+
+
+        VariantAnnotator jannovarVariantAnnotator = new JannovarVariantAnnotator(GenomeAssembly.HG19, loadJannovarData(), ChromosomalRegionIndex
+                .empty());
+        VariantFactory jannovarVariantFactory = new VariantFactoryImpl(jannovarVariantAnnotator);
+
+        long numJannovarVariants;
+        try (Stream<VariantEvaluation> variants = jannovarVariantFactory.createVariantEvaluations(vcfPath)) {
+            numJannovarVariants = variants
+                    .count();
+        }
+        System.out.println("Read " + numJannovarVariants + " variants");
+
+    }
+
+    private class StubVariantAnnotator implements VariantAnnotator {
+
+        @Override
+        public VariantAnnotation annotate(String chr, int pos, String ref, String alt) {
+            return VariantAnnotation.builder()
+                    .chromosomeName(chr)
+                    .chromosome(toChromosomeNumber(chr))
+                    .position(pos)
+                    .ref(ref)
+                    .alt(alt)
+                    .build();
         }
 
-        private VcfParser(String... sampleNames) {
-            vcfCodec = getVcfCodecForSamples(sampleNames);
+        private int toChromosomeNumber(String chr) {
+            switch (chr) {
+                case "X":
+                    return 23;
+                case "Y":
+                    return 24;
+                case "M":
+                case "MT":
+                    return 25;
+                default:
+                    return Integer.parseInt(chr);
+            }
         }
+    }
 
-        private VCFCodec getVcfCodecForSamples(String... sampleNames) {
-            VCFCodec vcfCodec = new VCFCodec();
-            vcfCodec.setVCFHeader(new VCFHeader(Collections.emptySet(), Arrays.asList(sampleNames)), VCFHeaderVersion.VCF4_2);
-            return vcfCodec;
-        }
-
-        Stream<VariantContext> parse(String... lines) {
-            return Stream.of(lines).map(vcfCodec::decode);
-        }
-
-        Stream<VariantContext> parse(String line) {
-            return Stream.of(line).map(vcfCodec::decode);
-        }
+    private JannovarData loadJannovarData() {
+        Path transcriptFilePath = Paths.get("C:/Users/hhx640/Documents/exomiser-data/1806_hg19/1806_hg19_transcripts_ucsc.ser");
+        return JannovarDataProtoSerialiser.load(transcriptFilePath);
     }
 }

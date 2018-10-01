@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,17 +25,16 @@
  */
 package org.monarchinitiative.exomiser.core.analysis;
 
-import de.charite.compbio.jannovar.pedigree.Pedigree;
-import htsjdk.variant.vcf.VCFHeader;
-import org.junit.Test;
+import com.google.common.collect.ImmutableList;
+import de.charite.compbio.jannovar.mendel.ModeOfInheritance;
+import org.junit.jupiter.api.Test;
+import org.monarchinitiative.exomiser.core.genome.TestFactory;
 import org.monarchinitiative.exomiser.core.model.Gene;
+import org.monarchinitiative.exomiser.core.model.GeneScore;
 import org.monarchinitiative.exomiser.core.model.TranscriptAnnotation;
 import org.monarchinitiative.exomiser.core.model.VariantEvaluation;
 
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -68,40 +67,13 @@ public class AnalysisResultsTest {
 
     @Test
     public void testCanSetAndGetSampleNames() {
-        List<String> sampleNames = Arrays.asList("David");
+        List<String> sampleNames = ImmutableList.of("David");
 
         AnalysisResults instance = AnalysisResults.builder()
                 .sampleNames(sampleNames)
                 .build();
 
         assertThat(instance.getSampleNames(), equalTo(sampleNames));
-    }
-
-    @Test
-    public void testCanSetAndGetVcfFilePath() {
-        Path vcfPath = Paths.get("vcf");
-        AnalysisResults instance = AnalysisResults.builder()
-                .vcfPath(vcfPath)
-                .build();
-        assertThat(instance.getVcfPath(), equalTo(vcfPath));
-    }
-
-    @Test
-    public void testCanSetAndGetPedFilePath() {
-        Path pedPath = Paths.get("ped");
-        AnalysisResults instance = AnalysisResults.builder()
-                .pedPath(pedPath)
-                .build();
-        assertThat(instance.getPedPath(), equalTo(pedPath));
-    }
-
-    @Test
-    public void testCanSetAndGetVcfHeader() {
-        VCFHeader vcfHeader = new VCFHeader();
-        AnalysisResults instance = AnalysisResults.builder()
-                .vcfHeader(vcfHeader)
-                .build();
-        assertThat(instance.getVcfHeader(), equalTo(vcfHeader));
     }
 
     @Test
@@ -114,21 +86,110 @@ public class AnalysisResultsTest {
     }
 
     @Test
-    public void testCanSetAndGetPedigree() {
-        Pedigree pedigree = Pedigree.constructSingleSamplePedigree("Individual");
-        AnalysisResults instance = AnalysisResults.builder()
-                .pedigree(pedigree)
-                .build();
-        assertThat(instance.getPedigree(), equalTo(pedigree));
-    }
-
-    @Test
     public void testCanSetAndGetGenes() {
         List<Gene> genes = new ArrayList<>();
         AnalysisResults instance = AnalysisResults.builder()
                 .genes(genes)
                 .build();
         assertThat(instance.getGenes(), equalTo(genes));
+    }
+
+    @Test
+    public void testGetGeneScoresReturnsEmptyListWithNoResults() {
+        AnalysisResults empty = AnalysisResults.builder().build();
+
+        assertThat(empty.getGeneScores(), equalTo(Collections.emptyList()));
+    }
+
+    @Test
+    public void testGetGeneScores() {
+        //
+        Gene fgfr2Gene = TestFactory.newGeneFGFR2();
+        VariantEvaluation top = VariantEvaluation.builder(10, 23456, "G", "T").build();
+        GeneScore first = GeneScore.builder()
+                .geneIdentifier(fgfr2Gene.getGeneIdentifier())
+                .modeOfInheritance(ModeOfInheritance.AUTOSOMAL_DOMINANT)
+                .combinedScore(1f)
+                .contributingVariants(ImmutableList.of(top))
+                .build();
+
+        VariantEvaluation bottom = VariantEvaluation.builder(10, 23456, "A", "T").build();
+        GeneScore third = GeneScore.builder()
+                .geneIdentifier(fgfr2Gene.getGeneIdentifier())
+                .modeOfInheritance(ModeOfInheritance.AUTOSOMAL_RECESSIVE)
+                .combinedScore(0.50f)
+                .contributingVariants(ImmutableList.of(bottom))
+                .build();
+
+        fgfr2Gene.addGeneScore(first);
+        fgfr2Gene.addGeneScore(third);
+
+        Gene rbm8aGene = TestFactory.newGeneRBM8A();
+        VariantEvaluation middle = VariantEvaluation.builder(7, 456889, "C", "A").build();
+        GeneScore second = GeneScore.builder()
+                .geneIdentifier(rbm8aGene.getGeneIdentifier())
+                .modeOfInheritance(ModeOfInheritance.AUTOSOMAL_DOMINANT)
+                .combinedScore(0.75f)
+                .contributingVariants(ImmutableList.of(middle))
+                .build();
+        rbm8aGene.addGeneScore(second);
+
+        //no gene score for SHH
+        Gene shhGene = TestFactory.newGeneSHH();
+
+        List<Gene> genes = ImmutableList.of(fgfr2Gene, rbm8aGene, shhGene);
+
+        AnalysisResults instance = AnalysisResults.builder()
+                .genes(genes)
+                .build();
+
+        List<GeneScore> expected = ImmutableList.of(first, second, third);
+        assertThat(instance.getGeneScores(), equalTo(expected));
+    }
+
+    @Test
+    public void testGetGeneScoresForMode() {
+        Gene fgfr2Gene = TestFactory.newGeneFGFR2();
+        VariantEvaluation top = VariantEvaluation.builder(10, 23456, "G", "T").build();
+        GeneScore firstAD = GeneScore.builder()
+                .geneIdentifier(fgfr2Gene.getGeneIdentifier())
+                .modeOfInheritance(ModeOfInheritance.AUTOSOMAL_DOMINANT)
+                .combinedScore(1f)
+                .contributingVariants(ImmutableList.of(top))
+                .build();
+
+        VariantEvaluation bottom = VariantEvaluation.builder(10, 23456, "A", "T").build();
+        GeneScore thirdAR = GeneScore.builder()
+                .geneIdentifier(fgfr2Gene.getGeneIdentifier())
+                .modeOfInheritance(ModeOfInheritance.AUTOSOMAL_RECESSIVE)
+                .combinedScore(0.50f)
+                .contributingVariants(ImmutableList.of(bottom))
+                .build();
+
+        fgfr2Gene.addGeneScore(firstAD);
+        fgfr2Gene.addGeneScore(thirdAR);
+
+        Gene rbm8aGene = TestFactory.newGeneRBM8A();
+        VariantEvaluation middle = VariantEvaluation.builder(7, 456889, "C", "A").build();
+        GeneScore secondAD = GeneScore.builder()
+                .geneIdentifier(rbm8aGene.getGeneIdentifier())
+                .modeOfInheritance(ModeOfInheritance.AUTOSOMAL_DOMINANT)
+                .combinedScore(0.75f)
+                .contributingVariants(ImmutableList.of(middle))
+                .build();
+        rbm8aGene.addGeneScore(secondAD);
+
+        //no gene score for SHH
+        Gene shhGene = TestFactory.newGeneSHH();
+
+        List<Gene> genes = ImmutableList.of(fgfr2Gene, rbm8aGene, shhGene);
+
+        AnalysisResults instance = AnalysisResults.builder()
+                .genes(genes)
+                .build();
+
+        assertThat(instance.getGeneScoresForMode(ModeOfInheritance.AUTOSOMAL_DOMINANT), equalTo(ImmutableList.of(firstAD, secondAD)));
+        assertThat(instance.getGeneScoresForMode(ModeOfInheritance.AUTOSOMAL_RECESSIVE), equalTo(ImmutableList.of(thirdAR)));
     }
 
     @Test
@@ -139,7 +200,7 @@ public class AnalysisResultsTest {
 
         VariantEvaluation unAnnotatedVariantEvaluation = VariantEvaluation.builder(7, 155604800, "C", "CTT").build();
 
-        List<VariantEvaluation> allVariantEvaluations = Arrays.asList(annotatedVariantEvaluation, unAnnotatedVariantEvaluation);
+        List<VariantEvaluation> allVariantEvaluations = ImmutableList.of(annotatedVariantEvaluation, unAnnotatedVariantEvaluation);
 
         AnalysisResults instance = AnalysisResults.builder()
                 .variantEvaluations(allVariantEvaluations)
@@ -159,22 +220,21 @@ public class AnalysisResultsTest {
 
     @Test
     public void testEquals() {
-        Path vcf = Paths.get("test.vcf");
-        AnalysisResults instance = AnalysisResults.builder().vcfPath(vcf).build();
-        AnalysisResults other = AnalysisResults.builder().vcfPath(vcf).build();
+        AnalysisResults instance = AnalysisResults.builder().probandSampleName("wibble").build();
+        AnalysisResults other = AnalysisResults.builder().probandSampleName("wibble").build();
         assertThat(instance, equalTo(other));
     }
 
     @Test
     public void testNotEquals() {
-        AnalysisResults instance = AnalysisResults.builder().vcfPath(Paths.get("test.vcf")).build();
-        AnalysisResults other = AnalysisResults.builder().pedPath(Paths.get("other.ped")).build();
+        AnalysisResults instance = AnalysisResults.builder().probandSampleName("wibble").build();
+        AnalysisResults other = AnalysisResults.builder().probandSampleName("wibble").sampleNames(ImmutableList.of("Fred", "Wilma")).build();
         assertThat(instance, not(equalTo(other)));
     }
 
     @Test
     public void testString() {
-        AnalysisResults instance = AnalysisResults.builder().vcfPath(Paths.get("test.vcf")).pedPath(Paths.get("test.ped")).build();
+        AnalysisResults instance = AnalysisResults.builder().probandSampleName("Zaphod_Beeblebrox").build();
 
         System.out.println(instance);
     }

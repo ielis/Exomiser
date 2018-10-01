@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -26,28 +26,27 @@
 package org.monarchinitiative.exomiser.core.analysis.util;
 
 import de.charite.compbio.jannovar.mendel.ModeOfInheritance;
-import de.charite.compbio.jannovar.pedigree.Disease;
-import de.charite.compbio.jannovar.pedigree.PedPerson;
-import de.charite.compbio.jannovar.pedigree.Pedigree;
-import de.charite.compbio.jannovar.pedigree.Sex;
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.Genotype;
 import htsjdk.variant.variantcontext.GenotypeType;
 import htsjdk.variant.variantcontext.VariantContext;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.monarchinitiative.exomiser.core.filters.FilterResult;
 import org.monarchinitiative.exomiser.core.filters.FilterType;
 import org.monarchinitiative.exomiser.core.model.Gene;
+import org.monarchinitiative.exomiser.core.model.Pedigree;
+import org.monarchinitiative.exomiser.core.model.Pedigree.Individual;
+import org.monarchinitiative.exomiser.core.model.Pedigree.Individual.Sex;
+import org.monarchinitiative.exomiser.core.model.Pedigree.Individual.Status;
 import org.monarchinitiative.exomiser.core.model.VariantEvaluation;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 
 import static org.hamcrest.CoreMatchers.*;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.monarchinitiative.exomiser.core.analysis.util.TestAlleleFactory.*;
 
 /**
@@ -56,37 +55,55 @@ import static org.monarchinitiative.exomiser.core.analysis.util.TestAlleleFactor
  */
 public class InheritanceModeAnalyserTest {
 
-    @Test
-    public void testAnalyseInheritanceModes_SingleSample_NoVariants() {
-        Gene gene = newGene();
-        Pedigree pedigree = Pedigree.constructSingleSamplePedigree("Adam");
+    private Gene newGene() {
+        return new Gene("ABC", 123);
+    }
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.ANY, pedigree);
+    private String variantString(VariantEvaluation variant) {
+        return String.format("%s\t%s\t%s\t%s\t%s\tcompatibleWith=%s",variant.getChromosome(), variant.getRef(), variant.getAlt(), variant.getAltAlleleId(), variant.getGenotypeString(), variant.getCompatibleInheritanceModes());
+    }
+
+    private InheritanceModeAnalyser newInheritanceModeAnalyser(Pedigree pedigree) {
+        InheritanceModeAnnotator inheritanceModeAnnotator = new InheritanceModeAnnotator(pedigree, InheritanceModeOptions.empty());
+        return new InheritanceModeAnalyser(inheritanceModeAnnotator);
+    }
+
+    private InheritanceModeAnalyser newInstanceForModes(Pedigree pedigree, ModeOfInheritance... inheritances) {
+        InheritanceModeAnnotator inheritanceModeAnnotator = new InheritanceModeAnnotator(pedigree, InheritanceModeOptions.defaultForModes(inheritances));
+        return new InheritanceModeAnalyser(inheritanceModeAnnotator);
+    }
+
+    @Test
+    public void testAnalyseInheritanceModesSingleSampleNoVariants() {
+        Gene gene = newGene();
+        Pedigree pedigree = Pedigree.justProband("Adam");
+
+        InheritanceModeAnalyser instance = newInheritanceModeAnalyser(pedigree);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
     }
 
     @Test
-    public void testAnalyseInheritanceModes_SingleSample_NoPassedVariants() {
+    public void testAnalyseInheritanceModesSingleSampleNoPassedVariants() {
         Gene gene = newGene();
         gene.addVariant(filteredVariant(1, 1 , "A", "T", FilterResult.fail(FilterType.FREQUENCY_FILTER)));
 
-        Pedigree pedigree = Pedigree.constructSingleSamplePedigree("Adam");
+        Pedigree pedigree = Pedigree.justProband("Adam");
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.ANY, pedigree);
+        InheritanceModeAnalyser instance = newInheritanceModeAnalyser(pedigree);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
     }
 
     @Test
-    public void testAnalyseInheritanceModes_SingleSample_OnePassedVariant_HET() {
+    public void testAnalyseInheritanceModesSingleSampleOnePassedVariantHet() {
         List<Allele> alleles = buildAlleles("A", "T");
         // build Genotype
-        Genotype genotype = buildSampleGenotype("Adam", alleles.get(0), alleles.get(1));
+        Genotype genotype = buildPhasedSampleGenotype("Adam", alleles.get(0), alleles.get(1));
         assertThat(genotype.getType(), equalTo(GenotypeType.HET));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, genotype);
@@ -95,22 +112,21 @@ public class InheritanceModeAnalyserTest {
         Gene gene = newGene();
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        Pedigree pedigree = Pedigree.constructSingleSamplePedigree("Adam");
+        Pedigree pedigree = Pedigree.justProband("Adam");
 
-
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_DOMINANT, pedigree);
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_DOMINANT);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
     }
 
     @Test
-    public void testAnalyseInheritanceModes_SingleSample_OnePassedVariant_HOM_REF_ShouldBeIncompatibleWith_RECESIVE() {
+    public void testAnalyseInheritanceModesSingleSampleOnePassedVariantHomRefShouldBeIncompatibleWithRecessive() {
         List<Allele> alleles = buildAlleles("A", "T");
 
         //HomRef 0/0 or 0|0 variants really shouldn't be causing rare diseases so we need to ensure these are removed
-        Genotype genotype = buildSampleGenotype("Adam", alleles.get(0), alleles.get(0));
+        Genotype genotype = buildPhasedSampleGenotype("Adam", alleles.get(0), alleles.get(0));
         assertThat(genotype.getType(), equalTo(GenotypeType.HOM_REF));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, genotype);
@@ -119,21 +135,21 @@ public class InheritanceModeAnalyserTest {
         Gene gene = newGene();
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        Pedigree pedigree = Pedigree.constructSingleSamplePedigree("Adam");
+        Pedigree pedigree = Pedigree.justProband("Adam");
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_RECESSIVE, pedigree);
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_RECESSIVE);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
     }
 
     @Test
-    public void testAnalyseInheritanceModes_SingleSample_OnePassedVariant_HOM_REF_ShouldBeIncompatibleWith_DOMINANT() {
+    public void testAnalyseInheritanceModesSingleSampleOnePassedVariantHomRefShouldBeIncompatibleWithDominant() {
         List<Allele> alleles = buildAlleles("A", "T");
 
         //HomRef 0/0 or 0|0 variants really shouldn't be causing rare diseases so we need to ensure these are removed
-        Genotype genotype = buildSampleGenotype("Adam", alleles.get(0), alleles.get(0));
+        Genotype genotype = buildPhasedSampleGenotype("Adam", alleles.get(0), alleles.get(0));
         assertThat(genotype.getType(), equalTo(GenotypeType.HOM_REF));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, genotype);
@@ -142,23 +158,24 @@ public class InheritanceModeAnalyserTest {
         Gene gene = newGene();
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        Pedigree pedigree = Pedigree.constructSingleSamplePedigree("Adam");
+        Pedigree pedigree = Pedigree.justProband("Adam");
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_DOMINANT, pedigree);
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_DOMINANT);
+
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
 
         gene.getPassedVariantEvaluations()
-                .forEach(variant -> assertThat(variant.getInheritanceModes().isEmpty(), is(true)));
+                .forEach(variant -> assertThat(variant.getCompatibleInheritanceModes().isEmpty(), is(true)));
     }
 
     @Test
-    public void testAnalyseInheritanceModes_SingleSample_OnePassedVariant_HOM_VAR() {
+    public void testAnalyseInheritanceModesSingleSampleOnePassedVariantHomVar() {
         List<Allele> alleles = buildAlleles("A", "T");
         //HOM_ALT
-        Genotype genotype = buildSampleGenotype("Adam", alleles.get(1), alleles.get(1));
+        Genotype genotype = buildPhasedSampleGenotype("Adam", alleles.get(1), alleles.get(1));
         assertThat(genotype.getType(), equalTo(GenotypeType.HOM_VAR));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, genotype);
@@ -167,31 +184,31 @@ public class InheritanceModeAnalyserTest {
         Gene gene = newGene();
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        Pedigree pedigree = Pedigree.constructSingleSamplePedigree("Adam");
+        Pedigree pedigree = Pedigree.justProband("Adam");
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_DOMINANT, pedigree);
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_DOMINANT);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
 
         gene.getPassedVariantEvaluations()
-                .forEach(variant -> assertThat(variant.getInheritanceModes().isEmpty(), is(true)));
+                .forEach(variant -> assertThat(variant.getCompatibleInheritanceModes().isEmpty(), is(true)));
     }
 
     @Test
-    public void testAnalyseInheritanceModes_MultiSample_OnePassedVariant_HOM_VAR_shouldBeCompatibelWith_RECESSIVE() {
+    public void testAnalyseInheritanceModesMultiSampleOnePassedVariantHomVarshouldBeCompatibleWithRecessive() {
         Gene gene = newGene();
         List<Allele> alleles = buildAlleles("A", "T");
         // build Genotype
         //HomVar 1/1 or 1|1 variants are a really likely candidate for recessive rare diseases
-        Genotype proband = buildSampleGenotype("Cain", alleles.get(1), alleles.get(1));
+        Genotype proband = buildPhasedSampleGenotype("Cain", alleles.get(1), alleles.get(1));
         assertThat(proband.getType(), equalTo(GenotypeType.HOM_VAR));
 
-        Genotype mother = buildSampleGenotype("Eve", alleles.get(0), alleles.get(1));
+        Genotype mother = buildPhasedSampleGenotype("Eve", alleles.get(0), alleles.get(1));
         assertThat(mother.getType(), equalTo(GenotypeType.HET));
 
-        Genotype father = buildSampleGenotype("Adam", alleles.get(1), alleles.get(0));
+        Genotype father = buildPhasedSampleGenotype("Adam", alleles.get(1), alleles.get(0));
         assertThat(father.getType(), equalTo(GenotypeType.HET));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, proband, mother, father);
@@ -199,34 +216,35 @@ public class InheritanceModeAnalyserTest {
 
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        PedPerson probandPerson = new PedPerson("Family", "Cain", "Adam", "Eve", Sex.MALE, Disease.AFFECTED, new ArrayList<String>());
-        PedPerson motherPerson = new PedPerson("Family", "Eve", "0", "0", Sex.FEMALE, Disease.UNAFFECTED, new ArrayList<String>());
-        PedPerson fatherPerson = new PedPerson("Family", "Adam", "0", "0", Sex.MALE, Disease.UNAFFECTED, new ArrayList<String>());
-        Pedigree pedigree = buildPedigree(probandPerson, motherPerson, fatherPerson);
+        Individual probandIndividual = Individual.builder().id("Cain").fatherId("Adam").motherId("Eve").sex(Sex.MALE).status(Status.AFFECTED).build();
+        Individual motherIndividual = Individual.builder().id("Eve").fatherId("").motherId("").sex(Sex.FEMALE).status(Status.UNAFFECTED).build();
+        Individual fatherIndividual = Individual.builder().id("Adam").fatherId("").motherId("").sex(Sex.MALE).status(Status.UNAFFECTED).build();
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_RECESSIVE, pedigree);
+        Pedigree pedigree = Pedigree.of(probandIndividual, motherIndividual, fatherIndividual);
+
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_RECESSIVE);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(true));
 
         gene.getPassedVariantEvaluations()
-                .forEach(variant -> assertThat(variant.getInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_RECESSIVE)));
+                .forEach(variant -> assertThat(variant.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(true)));
     }
 
     @Test
-    public void testAnalyseInheritanceModes_MultiSample_OnePassedVariant_HOM_REF_shouldNotBeCompatibleWith_AR() {
+    public void testAnalyseInheritanceModesMultiSampleOnePassedVariantHomRefShouldNotBeCompatibleWithAR() {
         Gene gene = newGene();
         List<Allele> alleles = buildAlleles("A", "T");
         // build Genotype
         //HomVar 1/1 or 1|1 variants are a really likely candidate for recessive rare diseases
-        Genotype proband = buildSampleGenotype("Cain", alleles.get(0), alleles.get(0));
+        Genotype proband = buildPhasedSampleGenotype("Cain", alleles.get(0), alleles.get(0));
         assertThat(proband.getType(), equalTo(GenotypeType.HOM_REF));
 
-        Genotype mother = buildSampleGenotype("Eve", alleles.get(0), alleles.get(1));
+        Genotype mother = buildPhasedSampleGenotype("Eve", alleles.get(0), alleles.get(1));
         assertThat(mother.getType(), equalTo(GenotypeType.HET));
 
-        Genotype father = buildSampleGenotype("Adam", alleles.get(1), alleles.get(0));
+        Genotype father = buildPhasedSampleGenotype("Adam", alleles.get(1), alleles.get(0));
         assertThat(father.getType(), equalTo(GenotypeType.HET));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, proband, mother, father);
@@ -234,34 +252,36 @@ public class InheritanceModeAnalyserTest {
 
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        PedPerson probandPerson = new PedPerson("Family", "Cain", "Adam", "Eve", Sex.MALE, Disease.AFFECTED, new ArrayList<String>());
-        PedPerson motherPerson = new PedPerson("Family", "Eve", "0", "0", Sex.FEMALE, Disease.UNAFFECTED, new ArrayList<String>());
-        PedPerson fatherPerson = new PedPerson("Family", "Adam", "0", "0", Sex.MALE, Disease.UNAFFECTED, new ArrayList<String>());
-        Pedigree pedigree = buildPedigree(probandPerson, motherPerson, fatherPerson);
+        Individual probandIndividual = Individual.builder().id("Cain").fatherId("Adam").motherId("Eve").sex(Sex.MALE).status(Status.AFFECTED).build();
+        Individual motherIndividual = Individual.builder().id("Eve").fatherId("").motherId("").sex(Sex.FEMALE).status(Status.UNAFFECTED).build();
+        Individual fatherIndividual = Individual.builder().id("Adam").fatherId("").motherId("").sex(Sex.MALE).status(Status.UNAFFECTED).build();
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_RECESSIVE, pedigree);
+        Pedigree pedigree = Pedigree.of(probandIndividual, motherIndividual, fatherIndividual);
+
+
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_RECESSIVE);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
 
         gene.getPassedVariantEvaluations()
-                .forEach(variant -> assertThat(variant.getInheritanceModes().isEmpty(), is(true)));
+                .forEach(variant -> assertThat(variant.getCompatibleInheritanceModes().isEmpty(), is(true)));
     }
 
     @Test
-    public void testAnalyseInheritanceModes_MultiSample_OnePassedVariant_HET_shouldBeCompatibleWith_AD() {
+    public void testAnalyseInheritanceModesMultiSampleOnePassedVariantHetShouldBeCompatibleWithAD() {
         Gene gene = newGene();
         List<Allele> alleles = buildAlleles("A", "T");
         // build Genotype
         //HomVar 1/1 or 1|1 variants are a really likely candidate for recessive rare diseases
-        Genotype proband = buildSampleGenotype("Cain", alleles.get(0), alleles.get(1));
+        Genotype proband = buildPhasedSampleGenotype("Cain", alleles.get(0), alleles.get(1));
         assertThat(proband.getType(), equalTo(GenotypeType.HET));
 
-        Genotype mother = buildSampleGenotype("Eve", alleles.get(0), alleles.get(0));
+        Genotype mother = buildPhasedSampleGenotype("Eve", alleles.get(0), alleles.get(0));
         assertThat(mother.getType(), equalTo(GenotypeType.HOM_REF));
 
-        Genotype father = buildSampleGenotype("Adam", alleles.get(0), alleles.get(0));
+        Genotype father = buildPhasedSampleGenotype("Adam", alleles.get(0), alleles.get(0));
         assertThat(father.getType(), equalTo(GenotypeType.HOM_REF));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, proband, mother, father);
@@ -269,34 +289,35 @@ public class InheritanceModeAnalyserTest {
 
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        PedPerson probandPerson = new PedPerson("Family", "Cain", "Adam", "Eve", Sex.MALE, Disease.AFFECTED, new ArrayList<String>());
-        PedPerson motherPerson = new PedPerson("Family", "Eve", "0", "0", Sex.FEMALE, Disease.UNAFFECTED, new ArrayList<String>());
-        PedPerson fatherPerson = new PedPerson("Family", "Adam", "0", "0", Sex.MALE, Disease.UNAFFECTED, new ArrayList<String>());
-        Pedigree pedigree = buildPedigree(probandPerson, motherPerson, fatherPerson);
+        Individual probandIndividual = Individual.builder().id("Cain").fatherId("Adam").motherId("Eve").sex(Sex.MALE).status(Status.AFFECTED).build();
+        Individual motherIndividual = Individual.builder().id("Eve").fatherId("").motherId("").sex(Sex.FEMALE).status(Status.UNAFFECTED).build();
+        Individual fatherIndividual = Individual.builder().id("Adam").fatherId("").motherId("").sex(Sex.MALE).status(Status.UNAFFECTED).build();
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_DOMINANT, pedigree);
+        Pedigree pedigree = Pedigree.of(probandIndividual, motherIndividual, fatherIndividual);
+
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_DOMINANT);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
 
         gene.getPassedVariantEvaluations()
-                .forEach(variant -> assertThat(variant.getInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_DOMINANT)));
+                .forEach(variant -> assertThat(variant.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(true)));
     }
 
     @Test
-    public void testAnalyseInheritanceModes_MultiSample_MultiAllelic_TwoPassedVariant_HOM_VAR_shouldBeCompatibleWith_AR() {
+    public void testAnalyseInheritanceModesMultiSampleMultiAllelicTwoPassedVariantHomVarShouldBeCompatibleWithAR() {
         Gene gene = newGene();
         List<Allele> alleles = buildAlleles("A", "T", "C");
         // build Genotype
         //HomVar 1/1 or 1|1 variants are a really likely candidate for recessive rare diseases
-        Genotype proband = buildSampleGenotype("Cain", alleles.get(2), alleles.get(2));
+        Genotype proband = buildPhasedSampleGenotype("Cain", alleles.get(2), alleles.get(2));
         assertThat(proband.getType(), equalTo(GenotypeType.HOM_VAR));
 
-        Genotype mother = buildSampleGenotype("Eve", alleles.get(0), alleles.get(1));
+        Genotype mother = buildPhasedSampleGenotype("Eve", alleles.get(0), alleles.get(1));
         assertThat(mother.getType(), equalTo(GenotypeType.HET));
 
-        Genotype father = buildSampleGenotype("Adam", alleles.get(1), alleles.get(0));
+        Genotype father = buildPhasedSampleGenotype("Adam", alleles.get(1), alleles.get(0));
         assertThat(father.getType(), equalTo(GenotypeType.HET));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, proband, mother, father);
@@ -305,45 +326,43 @@ public class InheritanceModeAnalyserTest {
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
         gene.addVariant(filteredVariant(1, 12345, "A", "C", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        PedPerson probandPerson = new PedPerson("Family", "Cain", "Adam", "Eve", Sex.MALE, Disease.AFFECTED, new ArrayList<String>());
-        PedPerson motherPerson = new PedPerson("Family", "Eve", "0", "0", Sex.FEMALE, Disease.UNAFFECTED, new ArrayList<String>());
-        PedPerson fatherPerson = new PedPerson("Family", "Adam", "0", "0", Sex.MALE, Disease.UNAFFECTED, new ArrayList<String>());
-        Pedigree pedigree = buildPedigree(probandPerson, motherPerson, fatherPerson);
+        Individual probandIndividual = Individual.builder().id("Cain").fatherId("Adam").motherId("Eve").sex(Sex.MALE).status(Status.AFFECTED).build();
+        Individual motherIndividual = Individual.builder().id("Eve").fatherId("").motherId("").sex(Sex.FEMALE).status(Status.UNAFFECTED).build();
+        Individual fatherIndividual = Individual.builder().id("Adam").fatherId("").motherId("").sex(Sex.MALE).status(Status.UNAFFECTED).build();
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_RECESSIVE, pedigree);
+        Pedigree pedigree = Pedigree.of(probandIndividual, motherIndividual, fatherIndividual);
+
+
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_RECESSIVE);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(true));
 
         gene.getPassedVariantEvaluations()
                 .forEach(variant -> {
                     System.out.println(variantString(variant));
-                    assertThat(variant.getInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_RECESSIVE));
+                    assertThat(variant.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(true));
                 });
-    }
-
-    private String variantString(VariantEvaluation variant) {
-        return String.format("%s\t%s\t%s\t%s\t%s\tcompatibleWith=%s",variant.getChromosome(), variant.getRef(), variant.getAlt(), variant.getAltAlleleId(), variant.getGenotypeString(), variant.getInheritanceModes());
     }
 
     /**
      * Currently ignored as Jannovar multi-allelic inheritance compatibility is broken for multi-sample VCF.
      */
-    @Ignore
+    @Disabled
     @Test
-    public void testAnalyseInheritanceModes_MultiSample_MultiAllelic_OnePassedVariant_HOM_VAR_altAllele2_shouldBeCompatibleWith_AR() {
+    public void testAnalyseInheritanceModesMultiSampleMultiAllelicOnePassedVariantHomVarAltAllele2shouldBeCompatibleWithAR() {
         Gene gene = newGene();
         List<Allele> alleles = buildAlleles("A", "T", "C");
         // build Genotype
         //HomVar 1/1 or 1|1 variants are a really likely candidate for recessive rare diseases
-        Genotype proband = buildSampleGenotype("Cain", alleles.get(2), alleles.get(2));
+        Genotype proband = buildPhasedSampleGenotype("Cain", alleles.get(2), alleles.get(2));
         assertThat(proband.getType(), equalTo(GenotypeType.HOM_VAR));
 
-        Genotype mother = buildSampleGenotype("Eve", alleles.get(1), alleles.get(1));
+        Genotype mother = buildPhasedSampleGenotype("Eve", alleles.get(1), alleles.get(1));
         assertThat(mother.getType(), equalTo(GenotypeType.HOM_VAR));
 
-        Genotype father = buildSampleGenotype("Adam", alleles.get(1), alleles.get(0));
+        Genotype father = buildPhasedSampleGenotype("Adam", alleles.get(1), alleles.get(0));
         assertThat(father.getType(), equalTo(GenotypeType.HET));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, proband, mother, father);
@@ -352,81 +371,81 @@ public class InheritanceModeAnalyserTest {
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.fail(FilterType.FREQUENCY_FILTER), variantContext));
         gene.addVariant(filteredVariant(1, 12345, "A", "C", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        PedPerson probandPerson = new PedPerson("Family", "Cain", "Adam", "Eve", Sex.MALE, Disease.AFFECTED, new ArrayList<String>());
-        PedPerson motherPerson = new PedPerson("Family", "Eve", "0", "0", Sex.FEMALE, Disease.UNAFFECTED, new ArrayList<String>());
-        PedPerson fatherPerson = new PedPerson("Family", "Adam", "0", "0", Sex.MALE, Disease.UNAFFECTED, new ArrayList<String>());
-        Pedigree pedigree = buildPedigree(probandPerson, motherPerson, fatherPerson);
+        Individual probandIndividual = Individual.builder().id("Cain").fatherId("Adam").motherId("Eve").sex(Sex.MALE).status(Status.AFFECTED).build();
+        Individual motherIndividual = Individual.builder().id("Eve").fatherId("").motherId("").sex(Sex.FEMALE).status(Status.UNAFFECTED).build();
+        Individual fatherIndividual = Individual.builder().id("Adam").fatherId("").motherId("").sex(Sex.MALE).status(Status.UNAFFECTED).build();
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_RECESSIVE, pedigree);
+        Pedigree pedigree = Pedigree.of(probandIndividual, motherIndividual, fatherIndividual);
+
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_RECESSIVE);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(true));
 
         gene.getPassedVariantEvaluations()
                 .forEach(variant -> {
                     System.out.println(variantString(variant));
-                    assertThat(variant.getInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_RECESSIVE));
+                    assertThat(variant.getCompatibleInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_RECESSIVE));
                 });
     }
 
     /**
      * Currently ignored as Jannovar multi-allelic inheritance compatibility is broken for multi-sample VCF.
      */
-    @Ignore
+    @Disabled
     @Test
-    public void testAnalyseInheritanceModes_MultiSample_MultiAllelic_OnePassedVariant_HET_shouldBeCompatibleWith_AD() {
+    public void testAnalyseInheritanceModesMultiSampleMultiAllelicOnePassedVariantHetShouldBeCompatibleWithAD() {
         Gene gene = newGene();
         List<Allele> alleles = buildAlleles("A", "T", "C");
 
-        Genotype proband = buildSampleGenotype("Cain", alleles.get(1), alleles.get(2));
+        Genotype proband = buildPhasedSampleGenotype("Cain", alleles.get(1), alleles.get(2));
         assertThat(proband.getType(), equalTo(GenotypeType.HET));
 
-        Genotype brother = buildSampleGenotype("Abel", alleles.get(1), alleles.get(1));
+        Genotype brother = buildPhasedSampleGenotype("Abel", alleles.get(1), alleles.get(1));
         assertThat(brother.getType(), equalTo(GenotypeType.HOM_VAR));
 
-        Genotype mother = buildSampleGenotype("Eve", alleles.get(0), alleles.get(1));
+        Genotype mother = buildPhasedSampleGenotype("Eve", alleles.get(0), alleles.get(1));
         assertThat(mother.getType(), equalTo(GenotypeType.HET));
 
-        Genotype father = buildSampleGenotype("Adam", alleles.get(1), alleles.get(0));
+        Genotype father = buildPhasedSampleGenotype("Adam", alleles.get(0), alleles.get(1));
         assertThat(father.getType(), equalTo(GenotypeType.HET));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, proband, brother, mother, father);
+//        VariantContext variantContext = buildVariantContext(1, 12345, alleles, proband);
         System.out.println("Built variant context " + variantContext);
 
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.fail(FilterType.FREQUENCY_FILTER), variantContext));
         gene.addVariant(filteredVariant(1, 12345, "A", "C", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        PedPerson probandPerson = new PedPerson("Family", "Cain", "Adam", "Eve", Sex.MALE, Disease.AFFECTED, new ArrayList<String>());
-        PedPerson brotherPerson = new PedPerson("Family", "Abel", "Adam", "Eve", Sex.MALE, Disease.UNAFFECTED, new ArrayList<String>());
-        PedPerson motherPerson = new PedPerson("Family", "Eve", "0", "0", Sex.FEMALE, Disease.UNAFFECTED, new ArrayList<String>());
-        PedPerson fatherPerson = new PedPerson("Family", "Adam", "0", "0", Sex.MALE, Disease.UNAFFECTED, new ArrayList<String>());
-        Pedigree pedigree = buildPedigree(probandPerson, brotherPerson, motherPerson, fatherPerson);
+        Individual probandIndividual = Individual.builder().id("Cain").fatherId("Adam").motherId("Eve").sex(Sex.MALE).status(Status.AFFECTED).build();
+        Individual brotherIndividual = Individual.builder().id("Abel").fatherId("Adam").motherId("Eve").sex(Sex.MALE).status(Status.UNAFFECTED).build();
+        Individual motherIndividual = Individual.builder().id("Eve").fatherId("").motherId("").sex(Sex.FEMALE).status(Status.UNAFFECTED).build();
+        Individual fatherIndividual = Individual.builder().id("Adam").fatherId("").motherId("").sex(Sex.MALE).status(Status.UNAFFECTED).build();
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_DOMINANT, pedigree);
+        Pedigree pedigree = Pedigree.of(probandIndividual, motherIndividual, fatherIndividual, brotherIndividual);
+
+
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_DOMINANT);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
 
         gene.getPassedVariantEvaluations()
                 .forEach(variant -> {
                     System.out.println(variantString(variant));
-                    assertThat(variant.getInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_DOMINANT));
+                    System.out.println(variant);
+                    assertThat(variant.getCompatibleInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_DOMINANT));
                 });
     }
 
-    private Gene newGene() {
-        return new Gene("ABC", 123);
-    }
-
-
     @Test
-    public void testAnalyseInheritanceModes_SingleSample_MultiAllelic_OnePassedVariant_HET_shouldBeCompatibleWith_AD() {
+    public void testAnalyseInheritanceModesSingleSampleMultiAllelicOnePassedVariantHetShouldBeCompatibleWithAD() {
         Gene gene = newGene();
         List<Allele> alleles = buildAlleles("A", "T", "C");
 
-        Genotype proband = buildSampleGenotype("Cain", alleles.get(1), alleles.get(2));
+        Genotype proband = buildPhasedSampleGenotype("Cain", alleles.get(1), alleles.get(2));
         assertThat(proband.getType(), equalTo(GenotypeType.HET));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, proband);
@@ -435,27 +454,27 @@ public class InheritanceModeAnalyserTest {
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.fail(FilterType.FREQUENCY_FILTER), variantContext));
         gene.addVariant(filteredVariant(1, 12345, "A", "C", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        Pedigree pedigree = Pedigree.constructSingleSamplePedigree("Cain");
+        Pedigree pedigree = Pedigree.justProband("Cain");
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_DOMINANT, pedigree);
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_DOMINANT);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
 
         gene.getPassedVariantEvaluations()
                 .forEach(variant -> {
                     System.out.println(variantString(variant));
-                    assertThat(variant.getInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_DOMINANT));
+                    assertThat(variant.getCompatibleInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_DOMINANT));
                 });
     }
 
     @Test
-    public void testAnalyseInheritanceModes_SingleSample_MultiAllelic_TwoPassedVariant_HET_shouldBeCompatibleWith_AD() {
+    public void testAnalyseInheritanceModesSingleSampleMultiAllelicTwoPassedVariantHetShouldBeCompatibleWithAD() {
         Gene gene = newGene();
         List<Allele> alleles = buildAlleles("A", "T", "C");
 
-        Genotype proband = buildSampleGenotype("Cain", alleles.get(1), alleles.get(2));
+        Genotype proband = buildPhasedSampleGenotype("Cain", alleles.get(1), alleles.get(2));
         assertThat(proband.getType(), equalTo(GenotypeType.HET));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, proband);
@@ -464,27 +483,27 @@ public class InheritanceModeAnalyserTest {
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
         gene.addVariant(filteredVariant(1, 12345, "A", "C", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        Pedigree pedigree = Pedigree.constructSingleSamplePedigree("Cain");
+        Pedigree pedigree = Pedigree.justProband("Cain");
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_DOMINANT, pedigree);
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_DOMINANT);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
 
         gene.getPassedVariantEvaluations()
                 .forEach(variant -> {
                     System.out.println(variantString(variant));
-                    assertThat(variant.getInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_DOMINANT));
+                    assertThat(variant.getCompatibleInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_DOMINANT));
                 });
     }
 
     @Test
-    public void testAnalyseInheritanceModes_SingleSample_MultiAllelic_TwoPassedVariant_HOM_VAR_Allele2_shouldBeCompatibleWith_AR() {
+    public void testAnalyseInheritanceModesSingleSampleMultiAllelicTwoPassedVariantHomVarAllele2shouldBeCompatibleWithAR() {
         Gene gene = newGene();
         List<Allele> alleles = buildAlleles("A", "T", "C");
 
-        Genotype proband = buildSampleGenotype("Cain", alleles.get(2), alleles.get(2));
+        Genotype proband = buildPhasedSampleGenotype("Cain", alleles.get(2), alleles.get(2));
         assertThat(proband.getType(), equalTo(GenotypeType.HOM_VAR));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, proband);
@@ -493,27 +512,27 @@ public class InheritanceModeAnalyserTest {
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
         gene.addVariant(filteredVariant(1, 12345, "A", "C", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        Pedigree pedigree = Pedigree.constructSingleSamplePedigree("Cain");
+        Pedigree pedigree = Pedigree.justProband("Cain");
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_RECESSIVE, pedigree);
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_RECESSIVE);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(true));
 
         gene.getPassedVariantEvaluations()
                 .forEach(variant -> {
                     System.out.println(variantString(variant));
-                    assertThat(variant.getInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_RECESSIVE));
+                    assertThat(variant.getCompatibleInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_RECESSIVE));
                 });
     }
 
     @Test
-    public void testAnalyseInheritanceModes_SingleSample_MultiAllelic_TwoPassedVariant_HOM_VAR_Allele1_shouldBeCompatibleWith_AR() {
+    public void testAnalyseInheritanceModesSingleSampleMultiAllelicTwoPassedVariantHomVarAllele1ShouldBeCompatibleWithAR() {
         Gene gene = newGene();
         List<Allele> alleles = buildAlleles("A", "T", "C");
 
-        Genotype proband = buildSampleGenotype("Cain", alleles.get(1), alleles.get(1));
+        Genotype proband = buildPhasedSampleGenotype("Cain", alleles.get(1), alleles.get(1));
         assertThat(proband.getType(), equalTo(GenotypeType.HOM_VAR));
 
         VariantContext variantContext = buildVariantContext(1, 12345, alleles, proband);
@@ -522,86 +541,159 @@ public class InheritanceModeAnalyserTest {
         gene.addVariant(filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
         gene.addVariant(filteredVariant(1, 12345, "A", "C", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext));
 
-        Pedigree pedigree = Pedigree.constructSingleSamplePedigree("Cain");
+        Pedigree pedigree = Pedigree.justProband("Cain");
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_RECESSIVE, pedigree);
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_RECESSIVE);
         instance.analyseInheritanceModes(gene);
-        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(false));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
         assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(true));
 
         gene.getPassedVariantEvaluations()
                 .forEach(variant -> {
                     System.out.println(variantString(variant));
-                    assertThat(variant.getInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_RECESSIVE));
+                    assertThat(variant.getCompatibleInheritanceModes(), hasItem(ModeOfInheritance.AUTOSOMAL_RECESSIVE));
                 });
     }
 
     @Test
-    public void testFindCompHetCompatibleAllelesTwoAffectedSibsUnaffectedMotherhMissingFater() {
+    public void testAnalyseMultipleInheritanceModesForSingleSample() {
+        List<Allele> hetAltAlleles = buildAlleles("A", "T", "C");
+        Genotype hetAltGenotype = buildPhasedSampleGenotype("Cain", hetAltAlleles.get(2), hetAltAlleles.get(2));
+        VariantContext variantContext = buildVariantContext(1, 12345, hetAltAlleles, hetAltGenotype);
+        VariantEvaluation hetAltVar1 = filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext);
+        VariantEvaluation hetAltVar2 = filteredVariant(1, 12345, "A", "C", FilterResult.pass(FilterType.FREQUENCY_FILTER), variantContext);
+
+        List<Allele> homAlt = buildAlleles("C", "G");
+        Genotype homAltGenotype = buildPhasedSampleGenotype("Cain", homAlt.get(1), homAlt.get(1));
+        VariantContext homAltVariantContext = buildVariantContext(1, 12345, homAlt, homAltGenotype);
+        VariantEvaluation homAltVar = filteredVariant(1, 12355, "C", "G", FilterResult.pass(FilterType.FREQUENCY_FILTER), homAltVariantContext);
+
+        List<Allele> het1 = buildAlleles("C", "G");
+        Genotype hetGenotype1 = buildPhasedSampleGenotype("Cain", het1.get(0), het1.get(1));
+        VariantContext hetVariantContext1 = buildVariantContext(1, 12365, het1, hetGenotype1);
+        VariantEvaluation hetVar1 = filteredVariant(1, 12365, "C", "G", FilterResult.pass(FilterType.FREQUENCY_FILTER), hetVariantContext1);
+
+        List<Allele> het2 = buildAlleles("G", "T");
+        Genotype hetGenotype2 = buildPhasedSampleGenotype("Cain", het2.get(0), het2.get(1));
+        VariantContext hetVariantContext2 = buildVariantContext(1, 12375, het2, hetGenotype2);
+        VariantEvaluation hetVar2 = filteredVariant(1, 12375, "G", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), hetVariantContext2);
+
+
         Gene gene = newGene();
+        gene.addVariant(hetAltVar1);
+        gene.addVariant(hetAltVar2);
+        gene.addVariant(homAltVar);
+        gene.addVariant(hetVar1);
+        gene.addVariant(hetVar2);
 
-        //1 98518687 . T A 733 . GT 1|0 1|0 1|0
-        List<Allele> alleles = buildAlleles("T", "A");
+        Pedigree pedigree = Pedigree.justProband("Cain");
 
-        Genotype proband = buildSampleGenotype("Cain", alleles.get(0), alleles.get(1));
-        assertThat(proband.getType(), equalTo(GenotypeType.HET));
+        InheritanceModeAnalyser instance = newInstanceForModes(pedigree, ModeOfInheritance.AUTOSOMAL_DOMINANT, ModeOfInheritance.AUTOSOMAL_RECESSIVE);
+        instance.analyseInheritanceModes(gene);
 
-        Genotype brother = buildSampleGenotype("Abel", alleles.get(0), alleles.get(1));
-        assertThat(brother.getType(), equalTo(GenotypeType.HET));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.ANY), is(true));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(true));
+        assertThat(gene.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(true));
 
-        Genotype mother = buildSampleGenotype("Eve", alleles.get(0), alleles.get(1));
-        assertThat(mother.getType(), equalTo(GenotypeType.HET));
+        assertThat(hetAltVar1.getCompatibleInheritanceModes(), equalTo(EnumSet.of(ModeOfInheritance.AUTOSOMAL_RECESSIVE)));
+        assertThat(hetAltVar2.getCompatibleInheritanceModes(), equalTo(EnumSet.of(ModeOfInheritance.AUTOSOMAL_RECESSIVE)));
 
-        VariantContext vc98518687 = buildVariantContext(1, 98518687, alleles, proband, brother, mother);
-        VariantEvaluation var98518687 = filteredVariant(1, 98518687, "T", "A", FilterResult.pass(FilterType.FREQUENCY_FILTER), vc98518687);
-        System.out.println("Built allele " + var98518687);
-        gene.addVariant(var98518687);
+        assertThat(homAltVar.getCompatibleInheritanceModes(), equalTo(EnumSet.of(ModeOfInheritance.AUTOSOMAL_RECESSIVE)));
 
-        //1 98518683 . T A 733 . GT 1|0 1|0 1|0
-        List<Allele> alleles98518683 = buildAlleles("T", "A");
+        assertThat(hetVar1.getCompatibleInheritanceModes(), equalTo(EnumSet.of(ModeOfInheritance.AUTOSOMAL_DOMINANT, ModeOfInheritance.AUTOSOMAL_RECESSIVE)));
+        assertThat(hetVar2.getCompatibleInheritanceModes(), equalTo(EnumSet.of(ModeOfInheritance.AUTOSOMAL_DOMINANT, ModeOfInheritance.AUTOSOMAL_RECESSIVE)));
+    }
 
-        Genotype proband98518683 = buildSampleGenotype("Cain", alleles98518683.get(0), alleles98518683.get(1));
-        assertThat(proband98518683.getType(), equalTo(GenotypeType.HET));
 
-        Genotype brother98518683 = buildSampleGenotype("Abel", alleles98518683.get(0), alleles98518683.get(1));
-        assertThat(brother98518683.getType(), equalTo(GenotypeType.HET));
+    @Test
+    public void testAnalyseMultipleInheritanceModesMultipleGenesForSingleSample() {
 
-        Genotype mother98518683 = buildSampleGenotype("Eve", alleles98518683.get(0), alleles98518683.get(1));
-        assertThat(mother98518683.getType(), equalTo(GenotypeType.HET));
+        List<Allele> hetAltAlleles1 = buildAlleles("A", "T");
+        Genotype hetAltGenotype1 = buildPhasedSampleGenotype("Cain", hetAltAlleles1.get(0), hetAltAlleles1.get(1));
+        VariantContext hetAltVariantContext1 = buildVariantContext(1, 12345, hetAltAlleles1, hetAltGenotype1);
+        VariantEvaluation hetAltVar1 = filteredVariant(1, 12345, "A", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), hetAltVariantContext1);
+//        hetAltVar1.setSampleGenotype("Sample", SampleGenotype.of(AlleleCall.REF, AlleleCall.ALT));
 
-        VariantContext vc98518683 = buildVariantContext(1, 98518683, alleles98518683, proband98518683, brother98518683, mother98518683);
-        VariantEvaluation var98518683 = filteredVariant(1, 98518683, "T", "A", FilterResult.pass(FilterType.FREQUENCY_FILTER), vc98518683);
-        System.out.println("Built allele " + var98518683);
-        gene.addVariant(var98518683);
+        List<Allele> hetAltAlleles2 = buildAlleles("G", "C");
+        Genotype hetAltGenotype2 = buildPhasedSampleGenotype("Cain", hetAltAlleles2.get(0), hetAltAlleles2.get(1));
+        VariantContext hetAltVariantContext2 = buildVariantContext(1, 12355, hetAltAlleles2, hetAltGenotype2);
+        VariantEvaluation hetAltVar2 = filteredVariant(1, 12355, "A", "C", FilterResult.pass(FilterType.FREQUENCY_FILTER), hetAltVariantContext2);
 
-        //1 97723020 . A G 1141 . GT 1/0 0/0 1/0
-        List<Allele> alleles97723020 = buildAlleles("A", "G");
+        Gene geneRecessiveAutosomal = newGene();
+        geneRecessiveAutosomal.addVariant(hetAltVar1);
+        geneRecessiveAutosomal.addVariant(hetAltVar2);
 
-        Genotype proband97723020 = buildSampleGenotype("Cain", alleles97723020.get(0), alleles97723020.get(1));
-        assertThat(proband97723020.getType(), equalTo(GenotypeType.HET));
 
-        Genotype brother97723020 = buildSampleGenotype("Abel", alleles97723020.get(0), alleles97723020.get(1));
-        assertThat(brother97723020.getType(), equalTo(GenotypeType.HET));
+        List<Allele> homAlt = buildAlleles("C", "G");
+        Genotype homAltGenotype = buildPhasedSampleGenotype("Cain", homAlt.get(1), homAlt.get(1));
+        VariantContext homAltVariantContext = buildVariantContext(23, 12345, homAlt, homAltGenotype);
+        VariantEvaluation homAltXVar = filteredVariant(23, 12355, "C", "G", FilterResult.pass(FilterType.FREQUENCY_FILTER), homAltVariantContext);
 
-        Genotype mother97723020 = buildSampleGenotype("Eve", alleles97723020.get(0), alleles97723020.get(0));
-        assertThat(mother97723020.getType(), equalTo(GenotypeType.HOM_REF));
+        Gene geneRecessiveX = newGene();
+        geneRecessiveX.addVariant(homAltXVar);
 
-        VariantContext vc97723020 = buildVariantContext(1, 97723020, alleles97723020, proband97723020, brother97723020, mother97723020);
-        VariantEvaluation var97723020 = filteredVariant(1, 97723020, "A", "G", FilterResult.pass(FilterType.FREQUENCY_FILTER), vc97723020);
-        System.out.println("Built allele " + var97723020);
-        gene.addVariant(var97723020);
+        List<Allele> het1 = buildAlleles("C", "G");
+        Genotype hetGenotype1 = buildPhasedSampleGenotype("Cain", het1.get(0), het1.get(1));
+        VariantContext hetVariantContext1 = buildVariantContext(22, 12365, het1, hetGenotype1);
+        VariantEvaluation autoHetVar = filteredVariant(2, 12365, "C", "G", FilterResult.pass(FilterType.FREQUENCY_FILTER), hetVariantContext1);
 
-        PedPerson probandPerson = new PedPerson("Family", "Cain", "0", "Eve", Sex.MALE, Disease.AFFECTED, Collections.emptyList());
-        PedPerson brotherPerson = new PedPerson("Family", "Abel", "0", "Eve", Sex.MALE, Disease.AFFECTED, Collections.emptyList());
-        PedPerson motherPerson = new PedPerson("Family", "Eve", "0", "0", Sex.FEMALE, Disease.UNAFFECTED, Collections.emptyList());
-        Pedigree pedigree = buildPedigree(probandPerson, brotherPerson, motherPerson);
+        Gene geneDominantAutosomal = newGene();
+        geneDominantAutosomal.addVariant(autoHetVar);
 
-        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(ModeOfInheritance.AUTOSOMAL_RECESSIVE, pedigree);
-        List<List<VariantEvaluation>> compHetAlleles = instance.findCompatibleCompHetAlleles(gene.getPassedVariantEvaluations());
 
-        assertThat(compHetAlleles.size(), equalTo(2));
-        assertThat(compHetAlleles.get(0), equalTo(Arrays.asList(var98518687, var97723020)));
-        assertThat(compHetAlleles.get(1), equalTo(Arrays.asList(var98518683, var97723020)));
+        List<Allele> het2 = buildAlleles("G", "T");
+        Genotype hetGenotype2 = buildPhasedSampleGenotype("Cain", het2.get(0), het2.get(1));
+        VariantContext hetVariantContext2 = buildVariantContext(25, 12375, het2, hetGenotype2);
+        VariantEvaluation mitoHetVar = filteredVariant(25, 12375, "G", "T", FilterResult.pass(FilterType.FREQUENCY_FILTER), hetVariantContext2);
+
+        Gene geneMitochondrial = newGene();
+        geneMitochondrial.addVariant(mitoHetVar);
+
+        Pedigree pedigree = Pedigree.justProband("Cain");
+
+        EnumSet<ModeOfInheritance> wantedModes = EnumSet.of(ModeOfInheritance.AUTOSOMAL_RECESSIVE, ModeOfInheritance.AUTOSOMAL_DOMINANT, ModeOfInheritance.X_RECESSIVE, ModeOfInheritance.X_DOMINANT, ModeOfInheritance.MITOCHONDRIAL);
+
+        InheritanceModeAnalyser instance = new InheritanceModeAnalyser(new InheritanceModeAnnotator(pedigree, InheritanceModeOptions.defaults()));
+        instance.analyseInheritanceModes(Arrays.asList(geneRecessiveAutosomal, geneRecessiveX, geneDominantAutosomal, geneMitochondrial));
+
+        assertThat(geneRecessiveAutosomal.isCompatibleWith(ModeOfInheritance.ANY), is(true));
+        assertThat(geneRecessiveAutosomal.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(true));
+        assertThat(geneRecessiveAutosomal.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(true));
+        assertThat(geneRecessiveAutosomal.isCompatibleWith(ModeOfInheritance.X_DOMINANT), is(false));
+        assertThat(geneRecessiveAutosomal.isCompatibleWith(ModeOfInheritance.X_RECESSIVE), is(false));
+        assertThat(geneRecessiveAutosomal.isCompatibleWith(ModeOfInheritance.MITOCHONDRIAL), is(false));
+
+        assertThat(hetAltVar1.getCompatibleInheritanceModes(), equalTo(EnumSet.of(ModeOfInheritance.AUTOSOMAL_DOMINANT, ModeOfInheritance.AUTOSOMAL_RECESSIVE)));
+        assertThat(hetAltVar2.getCompatibleInheritanceModes(), equalTo(EnumSet.of(ModeOfInheritance.AUTOSOMAL_DOMINANT, ModeOfInheritance.AUTOSOMAL_RECESSIVE)));
+
+
+        assertThat(geneRecessiveX.isCompatibleWith(ModeOfInheritance.ANY), is(true));
+        assertThat(geneRecessiveX.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
+        assertThat(geneRecessiveX.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
+        assertThat(geneRecessiveX.isCompatibleWith(ModeOfInheritance.X_DOMINANT), is(true));
+        assertThat(geneRecessiveX.isCompatibleWith(ModeOfInheritance.X_RECESSIVE), is(true));
+        assertThat(geneRecessiveX.isCompatibleWith(ModeOfInheritance.MITOCHONDRIAL), is(false));
+
+        assertThat(homAltXVar.getCompatibleInheritanceModes(), equalTo(EnumSet.of(ModeOfInheritance.X_RECESSIVE, ModeOfInheritance.X_DOMINANT)));
+
+
+        assertThat(geneDominantAutosomal.isCompatibleWith(ModeOfInheritance.ANY), is(true));
+        assertThat(geneDominantAutosomal.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(true));
+        assertThat(geneDominantAutosomal.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
+        assertThat(geneDominantAutosomal.isCompatibleWith(ModeOfInheritance.X_DOMINANT), is(false));
+        assertThat(geneDominantAutosomal.isCompatibleWith(ModeOfInheritance.X_RECESSIVE), is(false));
+        assertThat(geneDominantAutosomal.isCompatibleWith(ModeOfInheritance.MITOCHONDRIAL), is(false));
+
+        assertThat(autoHetVar.getCompatibleInheritanceModes(), equalTo(EnumSet.of(ModeOfInheritance.AUTOSOMAL_DOMINANT)));
+
+        assertThat(geneMitochondrial.isCompatibleWith(ModeOfInheritance.ANY), is(true));
+        assertThat(geneMitochondrial.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_DOMINANT), is(false));
+        assertThat(geneMitochondrial.isCompatibleWith(ModeOfInheritance.AUTOSOMAL_RECESSIVE), is(false));
+        assertThat(geneMitochondrial.isCompatibleWith(ModeOfInheritance.X_DOMINANT), is(false));
+        assertThat(geneMitochondrial.isCompatibleWith(ModeOfInheritance.X_RECESSIVE), is(false));
+        assertThat(geneMitochondrial.isCompatibleWith(ModeOfInheritance.MITOCHONDRIAL), is(true));
+
+        assertThat(mitoHetVar.getCompatibleInheritanceModes(), equalTo(EnumSet.of(ModeOfInheritance.MITOCHONDRIAL)));
     }
 }

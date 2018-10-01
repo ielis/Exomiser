@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,6 +20,7 @@
 
 package org.monarchinitiative.exomiser.core.model.frequency;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.common.collect.Maps;
 
 import java.util.*;
@@ -36,6 +37,9 @@ public class FrequencyData {
 
     private static final FrequencyData EMPTY_DATA = new FrequencyData(RsId.empty(), Collections.emptyMap());
 
+    private static final float VERY_RARE_SCORE = 1f;
+    private static final float NOT_RARE_SCORE = 0f;
+
     private final RsId rsId;
     private final Map<FrequencySource, Frequency> knownFrequencies;
 
@@ -49,6 +53,14 @@ public class FrequencyData {
 
     public static FrequencyData of(RsId rsId, Frequency... frequency) {
         return validate(rsId, Arrays.asList(frequency));
+    }
+
+    public static FrequencyData of(Frequency frequency) {
+        return validate(RsId.empty(), Collections.singletonList(frequency));
+    }
+
+    public static FrequencyData of(Frequency... frequency) {
+        return validate(RsId.empty(), Arrays.asList(frequency));
     }
 
     public static FrequencyData empty() {
@@ -88,6 +100,7 @@ public class FrequencyData {
      * regardless of frequency. That is, if the variant has an RS id in dbSNP or
      * any frequency data at all, return true, otherwise false.
      */
+    @JsonIgnore
     public boolean isRepresentedInDatabase() {
         return hasDbSnpRsID() || hasKnownFrequency();
     }
@@ -135,10 +148,29 @@ public class FrequencyData {
     }
 
     /**
-     * Returns a list of Frequency objects. If there is no known frequency data
-     * then an empty list will be returned.
+     * This function tests whether or not this {@code FrequencyData} object contains a {@code Frequency} object which has
+     * a frequency greater than the maximum frequency provided. This method does not check any ranges so it is advised
+     * that the user checks the frequency type in advance of calling this method. By default exomiser expresses the
+     * frequencies as a <b>percentage</b> value.
      *
-     * @return a List of Frequency data
+     * @param maxFreq the maximum frequency threshold against which the {@code Frequency} objects are tested
+     * @return true if the object contains a {@code Frequency} over the provided percentage value, otherwise returns false.
+     * @since 10.1.0
+     */
+    public boolean hasFrequencyOverPercentageValue(float maxFreq) {
+        for (Frequency frequency : knownFrequencies.values()) {
+            if (frequency.isOverThreshold(maxFreq)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns a list of {@code Frequency} objects. If there is no known frequency data then an empty list will be returned.
+     * This method will return a mutable copy of the underlying data.
+     *
+     * @return a mutable copy of the {@code Frequency} data
      */
     public List<Frequency> getKnownFrequencies() {
         return new ArrayList<>(knownFrequencies.values());
@@ -150,15 +182,9 @@ public class FrequencyData {
      *
      * @return
      */
+    @JsonIgnore
     public float getMaxFreq() {
-        //TODO this is analagous to PathogenicityData.getMostPathogenicScore()
-        //TODO so should really return a Frequency object...
-        float maxFreq = 0f;
-        for (Frequency freq : knownFrequencies.values()) {
-            //TODO ...but frequency needs to implement comparable first
-            maxFreq = Math.max(maxFreq, freq.getFrequency());
-        }
-        return maxFreq;
+        return (float) knownFrequencies.values().stream().mapToDouble(Frequency::getFrequency).max().orElse(0);
     }
 
     @Override
@@ -188,9 +214,6 @@ public class FrequencyData {
     public String toString() {
         return "FrequencyData{" + "rsId=" + rsId + ", knownFrequencies=" + knownFrequencies.values() + '}';
     }
-
-    private static final float VERY_RARE_SCORE = 1f;
-    private static final float NOT_RARE_SCORE = 0f;
 
     /**
      * @return returns a numerical value that is closer to one, the rarer

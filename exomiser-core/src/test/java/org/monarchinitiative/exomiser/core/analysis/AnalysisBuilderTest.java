@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,15 +20,21 @@
 
 package org.monarchinitiative.exomiser.core.analysis;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import de.charite.compbio.jannovar.annotation.VariantEffect;
 import de.charite.compbio.jannovar.mendel.ModeOfInheritance;
-import org.junit.Before;
-import org.junit.Test;
+import de.charite.compbio.jannovar.mendel.SubModeOfInheritance;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.monarchinitiative.exomiser.core.analysis.util.InheritanceModeOptions;
 import org.monarchinitiative.exomiser.core.filters.*;
-import org.monarchinitiative.exomiser.core.genome.VariantDataService;
-import org.monarchinitiative.exomiser.core.genome.VariantDataServiceStub;
+import org.monarchinitiative.exomiser.core.genome.GenomeAnalysisServiceProvider;
+import org.monarchinitiative.exomiser.core.genome.GenomeAssembly;
+import org.monarchinitiative.exomiser.core.genome.TestFactory;
+import org.monarchinitiative.exomiser.core.genome.UnsupportedGenomeAssemblyException;
 import org.monarchinitiative.exomiser.core.model.GeneticInterval;
+import org.monarchinitiative.exomiser.core.model.Pedigree;
 import org.monarchinitiative.exomiser.core.model.frequency.FrequencySource;
 import org.monarchinitiative.exomiser.core.model.pathogenicity.PathogenicitySource;
 import org.monarchinitiative.exomiser.core.prioritisers.*;
@@ -41,6 +47,7 @@ import static java.util.Collections.singletonList;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * @author Jules Jacobsen <j.jacobsen@qmul.ac.uk>
@@ -48,15 +55,16 @@ import static org.hamcrest.MatcherAssert.assertThat;
 public class AnalysisBuilderTest {
 
     private final PriorityFactory priorityFactory = new NoneTypePriorityFactoryStub();
-    private final VariantDataService variantDataService = new VariantDataServiceStub();
+    private final GenomeAnalysisServiceProvider genomeAnalysisServiceProvider = new GenomeAnalysisServiceProvider(TestFactory
+            .buildDefaultHg19GenomeAnalysisService());
 
     private AnalysisBuilder analysisBuilder;
 
     private List<String> hpoIds = Arrays.asList("HP:0001156", "HP:0001363", "HP:0011304", "HP:0010055");
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        analysisBuilder = new AnalysisBuilder(priorityFactory, variantDataService);
+        analysisBuilder = new AnalysisBuilder(priorityFactory, genomeAnalysisServiceProvider);
     }
 
     private List<AnalysisStep> analysisSteps() {
@@ -69,13 +77,13 @@ public class AnalysisBuilderTest {
                 priorityFactory.makePhivePrioritiser(),
                 new PriorityScoreFilter(PriorityType.PHIVE_PRIORITY, 0.501f),
                 new QualityFilter(500.0),
-                new InheritanceFilter(ModeOfInheritance.AUTOSOMAL_DOMINANT),
+                new InheritanceFilter(InheritanceModeOptions.defaults().getDefinedModes()),
                 priorityFactory.makeOmimPrioritiser()
         );
 
         //These are specified in a non-functional order.
         analysisBuilder.hpoIds(hpoIds)
-                .modeOfInheritance(ModeOfInheritance.AUTOSOMAL_DOMINANT)
+                .inheritanceModes(InheritanceModeOptions.defaults())
                 .addPriorityScoreFilter(PriorityType.PHIVE_PRIORITY, 0.501f)
                 .addPhivePrioritiser()
                 .addOmimPrioritiser()
@@ -93,10 +101,23 @@ public class AnalysisBuilderTest {
     }
 
     @Test
-    public void testAnalysisBuilderPedPath() {
-        Path pedPath = Paths.get("ped.ped");
-        analysisBuilder.pedPath(pedPath);
-        assertThat(analysisBuilder.build().getPedPath(), equalTo(pedPath));
+    public void testAnalysisBuilderGenomeAssembly() {
+        GenomeAssembly genomeAssembly = GenomeAssembly.HG19;
+        analysisBuilder.genomeAssembly(genomeAssembly);
+        assertThat(analysisBuilder.build().getGenomeAssembly(), equalTo(genomeAssembly));
+    }
+
+    @Test
+    public void testAnalysisBuilderUnsupportedGenomeAssembly() {
+        GenomeAssembly genomeAssembly = GenomeAssembly.HG38;
+        assertThrows(UnsupportedGenomeAssemblyException.class, () -> analysisBuilder.genomeAssembly(genomeAssembly));
+    }
+
+    @Test
+    public void testAnalysisBuilderPedigree() {
+        Pedigree pedigree = Pedigree.empty();
+        analysisBuilder.pedigree(pedigree);
+        assertThat(analysisBuilder.build().getPedigree(), equalTo(pedigree));
     }
 
     @Test
@@ -107,7 +128,7 @@ public class AnalysisBuilderTest {
     }
 
     @Test
-    public void testAnalysisBuilderHpoIds_default() {
+    public void testAnalysisBuilderHpoIdsDefault() {
         assertThat(analysisBuilder.build().getHpoIds(), equalTo(Collections.<String>emptyList()));
     }
 
@@ -118,18 +139,18 @@ public class AnalysisBuilderTest {
     }
 
     @Test
-    public void testAnalysisBuilderModeOfInheritance_default() {
-        assertThat(analysisBuilder.build().getModeOfInheritance(), equalTo(ModeOfInheritance.ANY));
+    public void testAnalysisBuilderModeOfInheritanceDefault() {
+        assertThat(analysisBuilder.build().getInheritanceModeOptions(), equalTo(InheritanceModeOptions.empty()));
     }
 
     @Test
     public void testAnalysisBuilderModeOfInheritance() {
-        analysisBuilder.modeOfInheritance(ModeOfInheritance.AUTOSOMAL_DOMINANT);
-        assertThat(analysisBuilder.build().getModeOfInheritance(), equalTo(ModeOfInheritance.AUTOSOMAL_DOMINANT));
+        analysisBuilder.inheritanceModes(InheritanceModeOptions.defaults());
+        assertThat(analysisBuilder.build().getInheritanceModeOptions(), equalTo(InheritanceModeOptions.defaults()));
     }
 
     @Test
-    public void testAnalysisBuilderAnalysisMode_default() {
+    public void testAnalysisBuilderAnalysisModeDefault() {
         assertThat(analysisBuilder.build().getAnalysisMode(), equalTo(AnalysisMode.PASS_ONLY));
     }
 
@@ -140,7 +161,7 @@ public class AnalysisBuilderTest {
     }
 
     @Test
-    public void testAnalysisBuilderFrequencySources_default() {
+    public void testAnalysisBuilderFrequencySourcesDefault() {
         assertThat(analysisBuilder.build().getFrequencySources(), equalTo(Collections.<FrequencySource>emptySet()));
     }
 
@@ -152,7 +173,7 @@ public class AnalysisBuilderTest {
     }
 
     @Test
-    public void testAnalysisBuilderPathogenicitySources_default() {
+    public void testAnalysisBuilderPathogenicitySourcesDefault() {
         assertThat(analysisBuilder.build().getPathogenicitySources(), equalTo(Collections.<PathogenicitySource>emptySet()));
     }
 
@@ -164,7 +185,8 @@ public class AnalysisBuilderTest {
     }
 
     private List<AnalysisStep> buildAndGetSteps() {
-        return analysisBuilder.build().getAnalysisSteps();
+        Analysis analysis = analysisBuilder.build();
+        return analysis.getAnalysisSteps();
     }
 
     @Test
@@ -182,9 +204,9 @@ public class AnalysisBuilderTest {
 
     @Test
     public void testAddEntrezGeneIdFilter() {
-        Set<Integer> entrezIds = Sets.newHashSet(123345, 67890);
+        Set<String> entrezIds = Sets.newHashSet("FGFR1", "FGFR2");
         analysisBuilder.addGeneIdFilter(entrezIds);
-        assertThat(buildAndGetSteps(), equalTo(singletonList(new EntrezGeneIdFilter(entrezIds))));
+        assertThat(buildAndGetSteps(), equalTo(singletonList(new GeneSymbolFilter(entrezIds))));
     }
 
     @Test
@@ -201,44 +223,95 @@ public class AnalysisBuilderTest {
         assertThat(buildAndGetSteps(), equalTo(singletonList(new QualityFilter(cutoff))));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testAddKnownVariantFilterThrowsExceptionWhenFrequencySourcesAreNotDefined() {
-        analysisBuilder.addKnownVariantFilter();
+        assertThrows(IllegalArgumentException.class, () -> analysisBuilder.addKnownVariantFilter());
     }
 
     @Test
     public void testAddKnownVariantFilter() {
+        analysisBuilder.genomeAssembly(GenomeAssembly.HG19);
         analysisBuilder.frequencySources(EnumSet.allOf(FrequencySource.class));
         analysisBuilder.addKnownVariantFilter();
         assertThat(buildAndGetSteps(), equalTo(singletonList(new KnownVariantFilter())));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test//(expected = UndefinedGenomeAssemblyException.class)
+    public void testAddKnownVariantFilterThrowsExceptionWhenGenomeAssemblyNotPreviouslyDefined() {
+        analysisBuilder.frequencySources(EnumSet.allOf(FrequencySource.class));
+        assertThrows(UndefinedGenomeAssemblyException.class, () -> analysisBuilder.addKnownVariantFilter());
+    }
+
+    @Test
     public void testAddFrequencyFilterThrowsExceptionWhenFrequencySourcesAreNotDefined() {
-        analysisBuilder.addFrequencyFilter(0.01f);
+        assertThrows(IllegalArgumentException.class, () -> analysisBuilder.addFrequencyFilter(0.01f));
     }
 
     @Test
     public void testAddFrequencyFilter() {
-        Set<FrequencySource> sources = EnumSet.of(FrequencySource.ESP_ALL, FrequencySource.THOUSAND_GENOMES);
-        analysisBuilder.frequencySources(sources);
         float cutOff = 0.01f;
-        analysisBuilder.addFrequencyFilter(cutOff);
+        analysisBuilder = analysisBuilderWithFrequencyFilter(cutOff);
         assertThat(buildAndGetSteps(), equalTo(singletonList(new FrequencyFilter(cutOff))));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
+    public void testAddFrequencyFilterDoesntChangeIfInheritanceModeOptionsIsEmpty() {
+        float cutOff = 0.01f;
+        analysisBuilder = analysisBuilderWithFrequencyFilter(cutOff);
+        analysisBuilder.inheritanceModes(InheritanceModeOptions.empty());
+        assertThat(buildAndGetSteps(), equalTo(singletonList(new FrequencyFilter(cutOff))));
+    }
+
+    private AnalysisBuilder analysisBuilderWithFrequencyFilter(float cutOff) {
+        analysisBuilder.genomeAssembly(GenomeAssembly.HG19);
+        analysisBuilder.frequencySources(EnumSet.of(FrequencySource.ESP_ALL, FrequencySource.THOUSAND_GENOMES));
+        analysisBuilder.addFrequencyFilter(cutOff);
+        return analysisBuilder;
+    }
+
+    @Test
+    public void testAddNoArgsFrequencyUsingInheritanceModeCutoffMaxFrequency() {
+        analysisBuilder.genomeAssembly(GenomeAssembly.HG19);
+        analysisBuilder.frequencySources(EnumSet.of(FrequencySource.ESP_ALL, FrequencySource.THOUSAND_GENOMES));
+        analysisBuilder.inheritanceModes(InheritanceModeOptions.defaults());
+        analysisBuilder.addFrequencyFilter();
+        assertThat(buildAndGetSteps(), equalTo(singletonList(new FrequencyFilter(InheritanceModeOptions.defaults().getMaxFreq()))));
+    }
+
+    @Test
+    public void testAddNoArgsFrequencyWhenInheritanceModeOptionsAreEmpty() {
+        analysisBuilder.genomeAssembly(GenomeAssembly.HG19);
+        analysisBuilder.frequencySources(EnumSet.of(FrequencySource.ESP_ALL, FrequencySource.THOUSAND_GENOMES));
+        analysisBuilder.inheritanceModes(InheritanceModeOptions.empty());
+        assertThrows(IllegalArgumentException.class, () -> analysisBuilder.addFrequencyFilter());
+    }
+
+    @Test
+    public void testAddFrequencyFilterThrowsExceptionWhenGenomeAssemblyNotPreviouslyDefined() {
+        analysisBuilder.frequencySources(EnumSet.of(FrequencySource.ESP_ALL, FrequencySource.THOUSAND_GENOMES));
+        float cutOff = 0.01f;
+        assertThrows(UndefinedGenomeAssemblyException.class, () -> analysisBuilder.addFrequencyFilter(cutOff));
+    }
+
+    @Test
     public void testAddPathogenicityFilterStepThrowsExceptionWhenPathogenicitySourcesAreNotDefined() {
-        analysisBuilder.addPathogenicityFilter(true);
+        assertThrows(IllegalArgumentException.class, () -> analysisBuilder.addPathogenicityFilter(true));
     }
 
     @Test
     public void testAddPathogenicityFilter() {
-        Set<PathogenicitySource> sources = EnumSet.allOf(PathogenicitySource.class);
-        analysisBuilder.pathogenicitySources(sources);
+        analysisBuilder.genomeAssembly(GenomeAssembly.HG19);
+        analysisBuilder.pathogenicitySources(EnumSet.allOf(PathogenicitySource.class));
         boolean keepNonPathogenic = true;
         analysisBuilder.addPathogenicityFilter(keepNonPathogenic);
         assertThat(buildAndGetSteps(), equalTo(singletonList(new PathogenicityFilter(keepNonPathogenic))));
+    }
+
+    @Test
+    public void testAddPathogenicityFilterThrowsExceptionWhenGenomeAssemblyNotPreviouslyDefined() {
+        analysisBuilder.pathogenicitySources(EnumSet.allOf(PathogenicitySource.class));
+        boolean keepNonPathogenic = true;
+        assertThrows(UndefinedGenomeAssemblyException.class, () -> analysisBuilder.addPathogenicityFilter(keepNonPathogenic));
     }
 
     @Test
@@ -263,17 +336,16 @@ public class AnalysisBuilderTest {
 
     @Test
     public void testAddInheritanceModeFilter() {
-        ModeOfInheritance autosomalDominant = ModeOfInheritance.AUTOSOMAL_DOMINANT;
-        analysisBuilder.modeOfInheritance(autosomalDominant);
+        analysisBuilder.inheritanceModes(InheritanceModeOptions.of(ImmutableMap.of(SubModeOfInheritance.AUTOSOMAL_DOMINANT, 0.1f)));
         analysisBuilder.addInheritanceFilter();
-        assertThat(buildAndGetSteps(), equalTo(singletonList(new InheritanceFilter(autosomalDominant))));
+        assertThat(buildAndGetSteps(), equalTo(singletonList(new InheritanceFilter(ModeOfInheritance.AUTOSOMAL_DOMINANT))));
     }
 
     @Test
     public void testAnalysisBuilderCanBuildCompleteAnalysis() {
         EnumSet<PathogenicitySource> pathogenicitySources = EnumSet.of(PathogenicitySource.REMM, PathogenicitySource.SIFT);
         EnumSet<FrequencySource> frequencySources = EnumSet.of(FrequencySource.ESP_AFRICAN_AMERICAN, FrequencySource.EXAC_EAST_ASIAN);
-        float frequencyCutOff = 1f;
+        float frequencyCutOff = 2f;
         FrequencyFilter frequencyFilter = new FrequencyFilter(frequencyCutOff);
 
         PhivePriority phivePrioritiser = priorityFactory.makePhivePrioritiser();
@@ -284,7 +356,8 @@ public class AnalysisBuilderTest {
         RegulatoryFeatureFilter regulatoryFeatureFilter = new RegulatoryFeatureFilter();
 
         analysisBuilder.hpoIds(hpoIds)
-                .modeOfInheritance(ModeOfInheritance.AUTOSOMAL_DOMINANT)
+                .genomeAssembly(GenomeAssembly.HG19)
+                .inheritanceModes(InheritanceModeOptions.defaults())
                 .analysisMode(AnalysisMode.FULL)
                 .frequencySources(frequencySources)
                 .pathogenicitySources(pathogenicitySources)
@@ -295,7 +368,7 @@ public class AnalysisBuilderTest {
 
         Analysis analysis = analysisBuilder.build();
         assertThat(analysis.getHpoIds(), equalTo(hpoIds));
-        assertThat(analysis.getModeOfInheritance(), equalTo(ModeOfInheritance.AUTOSOMAL_DOMINANT));
+        assertThat(analysis.getInheritanceModeOptions(), equalTo(InheritanceModeOptions.defaults()));
         assertThat(analysis.getAnalysisMode(), equalTo(AnalysisMode.FULL));
         assertThat(analysis.getFrequencySources(), equalTo(frequencySources));
         assertThat(analysis.getPathogenicitySources(), equalTo(pathogenicitySources));
@@ -316,10 +389,9 @@ public class AnalysisBuilderTest {
         assertThat(analysisSteps(), equalTo(singletonList(prioritiser)));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testAddPhivePrioritiserThrowsExcptionWhenHpoIdsNotDefined() {
-        analysisBuilder.addPhivePrioritiser();
-        assertThat(analysisSteps(), equalTo(singletonList(priorityFactory.makePhivePrioritiser())));
+        assertThrows(IllegalArgumentException.class, () -> analysisBuilder.addPhivePrioritiser());
     }
 
     @Test
@@ -332,18 +404,14 @@ public class AnalysisBuilderTest {
         assertThat(analysisSteps(), equalTo(singletonList(prioritiser)));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testAddHiPhivePrioritiserThrowsExceptionWhenNoHpoIdsDefined() {
-        Prioritiser prioritiser = priorityFactory.makeHiPhivePrioritiser(HiPhiveOptions.DEFAULT);
-
-        analysisBuilder.addHiPhivePrioritiser();
-
-        assertThat(analysisSteps(), equalTo(singletonList(prioritiser)));
+        assertThrows(IllegalArgumentException.class, () -> analysisBuilder.addHiPhivePrioritiser());
     }
 
     @Test
-    public void testCanSpecifyHiPhivePrioritiser_noOptions() {
-        Prioritiser prioritiser = priorityFactory.makeHiPhivePrioritiser(HiPhiveOptions.DEFAULT);
+    public void testCanSpecifyHiPhivePrioritiserNoOptions() {
+        Prioritiser prioritiser = priorityFactory.makeHiPhivePrioritiser(HiPhiveOptions.defaults());
 
         analysisBuilder.hpoIds(hpoIds)
                 .addHiPhivePrioritiser();
@@ -352,7 +420,7 @@ public class AnalysisBuilderTest {
     }
 
     @Test
-    public void testCanSpecifyHiPhivePrioritiser_withOptions() {
+    public void testCanSpecifyHiPhivePrioritiserWithOptions() {
         HiPhiveOptions options = HiPhiveOptions.builder()
                 .diseaseId("DISEASE:123")
                 .candidateGeneSymbol("GENE1")
@@ -367,13 +435,9 @@ public class AnalysisBuilderTest {
         assertThat(analysisSteps(), equalTo(singletonList(prioritiser)));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testAddPhenixPrioritiserThrowsExceptionWhenNoHpoIdsDefined() {
-        Prioritiser prioritiser = priorityFactory.makePhenixPrioritiser();
-
-        analysisBuilder.addPhenixPrioritiser();
-
-        assertThat(analysisSteps(), equalTo(singletonList(prioritiser)));
+        assertThrows(IllegalArgumentException.class, () -> analysisBuilder.addPhenixPrioritiser());
     }
 
     @Test
@@ -386,14 +450,14 @@ public class AnalysisBuilderTest {
         assertThat(analysisSteps(), equalTo(singletonList(prioritiser)));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testExomeWalkerPrioritiserThrowsExceptionWithEmptyList() {
-        analysisBuilder.addExomeWalkerPrioritiser(Collections.emptyList());
+        assertThrows(IllegalArgumentException.class, () -> analysisBuilder.addExomeWalkerPrioritiser(Collections.emptyList()));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testExomeWalkerPrioritiserThrowsExceptionWithNullList() {
-        analysisBuilder.addExomeWalkerPrioritiser(null);
+        assertThrows(IllegalArgumentException.class, () -> analysisBuilder.addExomeWalkerPrioritiser(null));
     }
 
     @Test

@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -19,45 +19,31 @@
  */
 package org.monarchinitiative.exomiser.web.controller;
 
-import config.TestDaoConfig;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import config.TestConfig;
+import org.junit.jupiter.api.Test;
 import org.monarchinitiative.exomiser.test.ExomiserStubDataConfig;
 import org.monarchinitiative.exomiser.web.ExomiserWebApp;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.test.context.junit.jupiter.web.SpringJUnitWebConfig;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
  *
- * @author Jules Jacobsen <jules.jacobsen@sanger.ac.uk>
+ * @author Jules Jacobsen <j.jacobsen@qmul.ac.uk>
  */
-@RunWith(SpringRunner.class)
-@SpringBootTest(classes = {ExomiserWebApp.class, ExomiserStubDataConfig.class, TestDaoConfig.class})
+@SpringJUnitWebConfig(classes = {ExomiserWebApp.class, ExomiserStubDataConfig.class, TestConfig.class})
+@WebMvcTest(controllers = DataController.class, secure = false)
 public class DataControllerTest {
-    
-    private MockMvc mockMvc;
 
     @Autowired
-    private WebApplicationContext webApplicationContext;
+    private MockMvc mockMvc;
 
-    @Before
-    public void setUp() {
-        //We have to reset our mock between tests because the mock objects
-        //are managed by the Spring container. If we would not reset them,
-        //stubbing and verified behavior would "leak" from one test to another.
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
-    }
-    
     private void assertOneGruffaloDiseaseOptionIsReturned(String inputTerm) throws Exception {
         mockMvc.perform(MockMvcRequestBuilders.get(String.format("/data/disease?term=%s", inputTerm)))
                 .andExpect(status().isOk())

@@ -2,7 +2,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -21,10 +21,15 @@
 
 package org.monarchinitiative.exomiser.core.analysis;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import de.charite.compbio.jannovar.mendel.ModeOfInheritance;
-import org.junit.Test;
+import de.charite.compbio.jannovar.mendel.SubModeOfInheritance;
+import org.junit.jupiter.api.Test;
+import org.monarchinitiative.exomiser.core.analysis.util.InheritanceModeOptions;
 import org.monarchinitiative.exomiser.core.filters.*;
+import org.monarchinitiative.exomiser.core.genome.GenomeAssembly;
+import org.monarchinitiative.exomiser.core.model.Pedigree;
 import org.monarchinitiative.exomiser.core.model.frequency.FrequencySource;
 import org.monarchinitiative.exomiser.core.model.pathogenicity.PathogenicitySource;
 import org.monarchinitiative.exomiser.core.prioritisers.NoneTypePrioritiser;
@@ -50,7 +55,7 @@ public class AnalysisTest {
     }
 
     private List<AnalysisStep> getAnalysisSteps() {
-        VariantFilter geneIdFilter = new EntrezGeneIdFilter(new HashSet<>());
+        VariantFilter geneIdFilter = new GeneSymbolFilter(new HashSet<>());
         Prioritiser noneTypePrioritiser = new NoneTypePrioritiser();
         GeneFilter inheritanceFilter = new InheritanceFilter(ModeOfInheritance.ANY);
         VariantFilter targetFilter = new PassAllVariantEffectsFilter();
@@ -68,12 +73,12 @@ public class AnalysisTest {
     }
 
     @Test
-    public void testCanSetAndGetPedFilePath() {
-        Path pedPath = Paths.get("ped");
+    public void testCanSetAndGetPedigree() {
+        Pedigree pedigree = Pedigree.empty();
         Analysis instance = newBuilder()
-                .pedPath(pedPath)
+                .pedigree(pedigree)
                 .build();
-        assertThat(instance.getPedPath(), equalTo(pedPath));
+        assertThat(instance.getPedigree(), equalTo(pedigree));
     }
 
     @Test
@@ -86,17 +91,47 @@ public class AnalysisTest {
     }
 
     @Test
-    public void modeOfInheritanceDefaultsToUnspecified() {
-        assertThat(DEFAULT_ANALYSIS.getModeOfInheritance(), equalTo(ModeOfInheritance.ANY));
+    public void canSetGenomeAssembly() {
+        Analysis instance = Analysis.builder()
+                .genomeAssembly(GenomeAssembly.HG19)
+                .build();
+        assertThat(instance.getGenomeAssembly(), equalTo(GenomeAssembly.HG19));
     }
 
     @Test
-    public void testCanMakeAnalysis_specifyModeOfInheritance() {
-        ModeOfInheritance modeOfInheritance = ModeOfInheritance.AUTOSOMAL_DOMINANT;
+    public void modeOfInheritanceDefaultsToEmpty() {
+        assertThat(DEFAULT_ANALYSIS.getInheritanceModeOptions(), equalTo(InheritanceModeOptions.empty()));
+    }
+
+    @Test
+    public void canSetModeOfInheritanceDefaults() {
         Analysis instance = newBuilder()
-                .modeOfInheritance(modeOfInheritance)
+                .inheritanceModeOptions(InheritanceModeOptions.defaults())
                 .build();
-        assertThat(instance.getModeOfInheritance(), equalTo(modeOfInheritance));
+        assertThat(instance.getInheritanceModeOptions(), equalTo(InheritanceModeOptions.defaults()));
+    }
+
+    @Test
+    public void testCanMakeAnalysisWithInheritanceModesFromMap() {
+        Map<SubModeOfInheritance, Float> inheritanceMap = ImmutableMap.of(SubModeOfInheritance.AUTOSOMAL_RECESSIVE_COMP_HET, 2.0f);
+
+        Analysis instance = newBuilder()
+                .inheritanceModeOptions(inheritanceMap)
+                .build();
+
+        assertThat(instance.getInheritanceModeOptions(), equalTo(InheritanceModeOptions.of(inheritanceMap)));
+    }
+
+    @Test
+    public void testCanMakeAnalysisWithInheritanceModesFromInheritanceModeOptions() {
+        Map<SubModeOfInheritance, Float> inheritanceMap = ImmutableMap.of(SubModeOfInheritance.AUTOSOMAL_RECESSIVE_COMP_HET, 2.0f);
+        InheritanceModeOptions inheritanceModeOptions = InheritanceModeOptions.of(inheritanceMap);
+
+        Analysis instance = newBuilder()
+                .inheritanceModeOptions(inheritanceModeOptions)
+                .build();
+
+        assertThat(instance.getInheritanceModeOptions(), equalTo(inheritanceModeOptions));
     }
 
     @Test
@@ -141,7 +176,7 @@ public class AnalysisTest {
     }
 
     @Test
-    public void testGetAnalysisSteps_ReturnsEmptyListWhenNoStepsHaveBeedAdded() {
+    public void testGetAnalysisStepsReturnsEmptyListWhenNoStepsHaveBeenAdded() {
         List<AnalysisStep> steps = Collections.emptyList();
         assertThat(DEFAULT_ANALYSIS.getAnalysisSteps(), equalTo(steps));
     }
@@ -174,7 +209,7 @@ public class AnalysisTest {
     }
 
     @Test
-    public void testGetAnalysisSteps_ReturnsListOfStepsAdded() {
+    public void testGetAnalysisStepsReturnsListOfStepsAdded() {
         List<AnalysisStep> steps = getAnalysisSteps();
 
         Analysis.Builder builder = newBuilder();

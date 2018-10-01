@@ -1,5 +1,118 @@
 # The Exomiser - Core Library Changelog
 
+## 11.0.0 ????
+API breaking changes:
+- Removed unused ```VariantSerialiser```
+- Moved ```ChromosomalRegionIndex``` from ```analysis.util``` package to ```model```
+- Changed ```HiPhiveOptions.DEFAULT``` to ```HiPhiveOptions.defaults()``` to match style with the rest of the framework
+- Deleted redundant ```MvStoreUtil.generateAlleleKey()``` method in favour of ```AlleleProtoAdaptor.toAlleleKey()```
+- Split ```VariantEffectPathogenicityScore.SPLICING_SCORE``` into ```SPLICE_DONOR_ACCEPTOR_SCORE``` and ```SPLICE_REGION_SCORE```
+- Removed unused ```VariantEvaluation.getNumberOfIndividuals()``` and ```VariantEvaluation.Builder.numIndividuals()```
+- ```InheritanceModeAnnotator``` now requires an Exomiser ```Pedigree``` as input and no longer takes a Jannovar ```de.charite.compbio.jannovar.pedigree.Pedigree``` 
+- Changed ```SampleIdentifier``` default identifier from 'Sample' to 'sample' to fit existing internal implementation details
+- Replaced ```Analysis.AnalysisBuilder.pedPath(pedPath)``` and ```Analysis.getPedPath()``` with ```Analysis.AnalysisBuilder.pedigree(pedigree)``` and ```Analysis.getPedigree()```
+- Replaced ```AnalysisBuilder.pedPath(pedPath)```  with ```AnalysisBuilder.pedigree(pedigree)```
+- Removed obsolete ```PedigreeFactory``` - this functionality has been split amongst the new Pedigree API classes
+- Removed ```AnalysisMode.SPARSE``` this was confusing and unused. Unless you need to debug a script, we advise using ```AnalysisMode.PASS_ONLY```
+- Replaced OutputSettings interface with the concrete implementation
+- Replaced ```OutputSettings.outputPassVariantsOnly()``` with ```OutputSettings.outputContributingVariantsOnly()```. This still has the default value of ```false```
+
+New APIs:
+- Added new jannovar package and faster data serialisation format handled by the ```JannovarDataProtoSerialiser``` and ```JannovarProtoConverter```.
+- Added new native ```Pedigree``` class for representing pedigrees.
+- Added new ```PedFiles``` class for reading PED files into a ```Pedigree``` object.
+- Added new ```PedigreeSampleValidator``` to check the pedigree, proband and VCF samples are consistent with each other.
+- Added ```SampleIdentifier.defaultSample()``` for use with unspecified single-sample VCF files.
+- Added ```InheritanceModeOptions.getMaxFreq()``` method for retrieving the maximum frequency of all the defined inheritance modes.
+- Added new no-args ```AnalysisBuilder.addFrequencyFilter()``` which uses maximum value from ```InheritanceModeOptions```
+- Added ```Pedigree``` support to ```AnalysisBuilder```
+- Added new ```VariantEvaluation.getSampleGenotypes()``` method to map sample names to genotype for that allele
+- Added new utility constructors to ```SampleGenotype``` _e.g._ ```SampleGenotype.het()``` , ```SampleGenotype.homRef()```
+
+Other changes:
+- Added support for REMM and CADD in ```AlleleProtoAdaptor```
+- Added check to remove alleles not called as ALT in proband
+- ```SampleGenotypes``` now calculated for all variants in te ```VariantFactory```
+- Added support ```frequencyFilter: {}``` to ```AnalysisParser```
+- Updated HTML output to display current SO terms for variant types/consequence
+- Various code clean-up changes
+- Changed dependency management to use spring-boot-dependencies rather than deprecated Spring Platform
+- Updated Spring Boot to version 2.0.4
+
+## 10.1.0 2018-05-09
+- Added new simple ```BedFiles``` class for reading in ```ChromosomalRegion``` from an external file. 
+- Added support for filtering multiple intervals in the ```IntervalFilter``` 
+- Added support for parsing multiple intervals in the ```AnalysisParser```
+- Added new ```OutputOption.JSON```
+- Added new JsonResultsWriter - JSON results format should be considered as being in a 'beta' state and may or may not change slightly in the future.
+- Added support for ClinVar annotations 
+- Added ClinVar annotations to ```HTML``` and ```JSON``` output options
+- ```TSV_GENE``` and ```TSV_VARIANT``` output formats have been frozen as adding the new datasources will break the format. Use the JSON output for machines or HTML for humans. 
+- Updated Spring platform to Brussels-SR9. This will be the final Exomiser release on the Brussels release train.
+
+## 10.0.1 2018-03-20
+- Updated HTSJDK library to fix ```TribbleException``` being thrown when trying to parse bgzipped VCF files
+
+## 10.0.0 2018-03-07
+API breaking changes:
+- Removed previously deprecated ```Settings``` and ```SettingsParser``` classes - this was only used by the cli which was also removed.
+- Removed unused ```PrioritiserSettings``` and ```PrioritiserSettingsImpl``` classes - these were only used by the ```SettingsParser```
+- Removed unused ```PrioritiserFactory.makePrioritiser(PrioritiserSettings settings)``` method - this was only used by the ```SettingsParser```
+- Removed unused ```PrioritiserFactory.getHpoIdsForDiseaseId(String diseaseId)``` method. This duplicated/called ```PriorityService.getHpoIdsForDiseaseId(String diseaseId)```
+- Renamed ```VariantTypePathogenicityScore``` to ```VariantEffectPathogenicityScore```
+- Method names of ```Inheritable``` have changed from ```InheritanceModes``` to ```CompatibleInheritanceModes``` to better describe their function.
+- Replaced ```SampleNameChecker``` with new ```SampleIdentifierUtil``` 
+- Changed signature of ```InheritanceModeAnalyser``` to require an ```InheritanceModeAnnotator```. This is now using Exomiser and Jannovar-native calls to analyse inheritance modes instead of the Jannovar mendel-bridge.
+- Changed ```GeneScorer.scoreGene()``` signature from ```Consumer<Gene>``` to ```Function<Gene, List<GeneScore>>``` to allow scoring of multiple inheritance modes in one run.
+- Changed ```Analysis``` and ```AnalysisBuilder``` method ```modeOfInheritance``` to ```inheritanceModes(InheritanceModeOptions inheritanceModeOptions)```
+- Removed unused methods on ```AnalysisResults```
+- Renamed ```OMIMPriority``` to ```OmimPriority```
+- Renamed ```OMIMPriorityResult``` to ```OmimPriorityResult```
+- Changed ```OmimPriorityResult``` constructor to require ```Map<ModeOfInheritance, Double> scoresByMode```, ```getScoresByMode()``` and ```getScoreForMode(modeOfInheritance)``` methods 
+- Changed ```DataMatrix``` from a concrete class to an interface
+- Changed ```ResultsWriter``` signatures to require a ```ModeOfInheritance``` to write results out for.
+- Changed ```ResultsWriterUtils``` now requires a specific ```ModeOfInheritance``` 
+
+New APIs:
+- Added new ```AlleleCall``` class to represent allele calls for alleles from the VCF file
+- Added new ```GeneScore``` class for holding results from the ```GeneScorer```
+- Added new ```SampleIdentifier``` class
+- Added new ```SampleGenotype``` class to represent VCF GenotypeCalls for a sample on a particular allele.
+- ```GeneIdentifier``` now implements ```Comparable``` and has a static ```compare(geneIdentifier1, geneIdentifier2)``` method
+- ```Gene``` now contains ```GeneScore``` having been scored by a ```GeneScorer```
+- ```VariantEvaluation``` now has methods to determine its compatibility and whether or not it contributes to the overall score under a particular ```ModeOfInheritance```
+- Added new ```SampleIdentifierUtil``` to replace deleted ```SampleNameChecker```
+- Added new ```InheritanceModeAnnotator``` and ```InheritanceModeOptions```
+- Added new ```VariantContextSampleGenotypeConverter``` to create ```SampleGenotype``` from a ```VariantContext```
+- Added new ```DataMatrixUtil```, ```InMemoryDataMatrix```, ```OffHeapDataMatrix```, ```StubDataMatrix``` implementations
+- Added new methods on ```DataMatrixIO``` to facilitate loading new ```DataMatrix``` objects from disk.
+- Added new ```AnalysisResultsWriter``` to handle writing out results instead of having to manually specify writers and inheritance modes 
+
+Other changes:
+- Demoted most logging from ```info``` to ```debug```
+- Removed Spring control of Thymeleaf from ```ThymeleafConfig``` and ```HtmlResultsWriter``` so this no longer interferes with web templates
+
+## 9.0.1 2018-01-15
+- Updated the Jannovar library to 0.24 which now enables filtering for mitochondrial inheritance modes.
+
+## 9.0.0 2017-12-12
+In addition to the user-facing changes listed on the cli, the core has received extensive refactoring and changes.
+- Maven groupId changed from root ```org.monarchinitiative``` to more specific ```org.monarchinitiative.exomiser```.
+- New ```AlleleProto``` protobuf class used to store allele data in the new MVStore.
+- Replaced ```DefaultPathogenicityDao``` and ```DefaultFrequencyDao``` implementations with ```MvStoreProto``` implementations.
+- Classes in the ```genome``` package are no longer under direct Spring control as the ```@Component``` and ```@Autowired``` annotations have been removed to enable user-defined genome assemblies on a per-analysis basis.
+- ```genome``` package classes are now configured explicitly in the ```exomiser-spring-boot-autoconfigure``` module.
+- New ```GenomeAssembly``` enum
+- New ```GenomeAnalysisServiceProvider``` class
+- New ```GenomeAnalysisService``` interface - a facade for providing simplified access to the genome module.
+- New ```VcfFiles``` utility class for providing access to VCF files with the HTSJDK
+- New ```VariantAnnotator``` interface
+- New ```JannovarVariantAnnotator``` and ```JannovarAnnotationService``` classes
+- ```VariantFactoryImpl``` now takes a ```VariantAnnotator``` as a constructor argument.
+- ```VariantDataService``` getRegulatoryFeatures() and getTopologicalDomains() split out into new ```GenomeDataService```
+- Deprecated ```Settings``` class - this will be removed in the next major version.
+- Updated classes in ```analysis``` package to enable analyses with user-defined genome assemblies.
+
 ## 8.0.0 2017-08-08
 In addition to the user-facing changes listed on the cli, the core has received extensive refactoring and changes.
 - Namespace changed from ```de.charite.compbio``` to ```org.monarchinitiative```. 

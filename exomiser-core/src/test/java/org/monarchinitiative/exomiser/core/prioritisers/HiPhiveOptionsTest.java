@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
  */
 package org.monarchinitiative.exomiser.core.prioritisers;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.monarchinitiative.exomiser.core.phenotype.Organism;
 import org.monarchinitiative.exomiser.core.prioritisers.HiPhiveOptions.InvalidRunParameterException;
 import org.monarchinitiative.exomiser.core.prioritisers.model.GeneDiseaseModel;
@@ -37,6 +37,7 @@ import java.util.EnumSet;
 
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * @author Jules Jacobsen <jules.jacobsen@sanger.ac.uk>
@@ -60,7 +61,7 @@ public class HiPhiveOptionsTest {
 
     @Test
     public void testDefault() {
-        HiPhiveOptions instance = HiPhiveOptions.DEFAULT;
+        HiPhiveOptions instance = HiPhiveOptions.defaults();
         assertDefaultOptions(instance);
     }
 
@@ -84,9 +85,9 @@ public class HiPhiveOptionsTest {
         assertAllRunParamsAreTrue(instance);
     }
 
-    @Test(expected = InvalidRunParameterException.class)
+    @Test
     public void testThrowsInvalidRunParameterExceptionWhenEncountersUnrecognisedRunParameter() {
-        HiPhiveOptions instance = HiPhiveOptions.builder().runParams("floorb").build();
+        assertThrows(InvalidRunParameterException.class, () -> HiPhiveOptions.builder().runParams("floorb").build());
     }
 
     @Test
@@ -312,14 +313,14 @@ public class HiPhiveOptionsTest {
 
     @Test
     public void testHashCode() {
-        HiPhiveOptions instance = HiPhiveOptions.DEFAULT;
-        HiPhiveOptions other = HiPhiveOptions.DEFAULT;
+        HiPhiveOptions instance = HiPhiveOptions.defaults();
+        HiPhiveOptions other = HiPhiveOptions.defaults();
         assertThat(instance.hashCode(), equalTo(other.hashCode()));
     }
 
     @Test
     public void testHashCodeNotEquals() {
-        HiPhiveOptions instance = HiPhiveOptions.DEFAULT;
+        HiPhiveOptions instance = HiPhiveOptions.defaults();
         HiPhiveOptions other = HiPhiveOptions.builder()
                 .candidateGeneSymbol("geneSymbol")
                 .diseaseId("disease")
@@ -329,14 +330,14 @@ public class HiPhiveOptionsTest {
 
     @Test
     public void testEquals() {
-        HiPhiveOptions instance = HiPhiveOptions.DEFAULT;
-        HiPhiveOptions other = HiPhiveOptions.DEFAULT;
+        HiPhiveOptions instance = HiPhiveOptions.defaults();
+        HiPhiveOptions other = HiPhiveOptions.defaults();
         assertThat(instance.equals(other), is(true));
     }
 
     @Test
     public void testNotEquals() {
-        HiPhiveOptions instance = HiPhiveOptions.DEFAULT;
+        HiPhiveOptions instance = HiPhiveOptions.defaults();
         HiPhiveOptions other = HiPhiveOptions.builder()
                 .candidateGeneSymbol("geneSymbol")
                 .diseaseId("disease")
@@ -346,7 +347,7 @@ public class HiPhiveOptionsTest {
 
     @Test
      public void testToStringDefaultConstructor() {
-        HiPhiveOptions instance = HiPhiveOptions.DEFAULT;
+        HiPhiveOptions instance = HiPhiveOptions.defaults();
         String defaultString  = "HiPhiveOptions{diseaseId='', candidateGeneSymbol='', benchmarkingEnabled=false, runPpi=true, runHuman=true, runMouse=true, runFish=true}";
         assertThat(instance.toString(), equalTo(defaultString));
     }
@@ -363,13 +364,13 @@ public class HiPhiveOptionsTest {
     }
 
     @Test
-    public void testGetOrganismsToRun_AllOrganisms() {
-        HiPhiveOptions instance = HiPhiveOptions.DEFAULT;
+    public void testGetOrganismsToRunAllOrganisms() {
+        HiPhiveOptions instance = HiPhiveOptions.defaults();
         assertThat(instance.getOrganismsToRun(), equalTo(EnumSet.of(Organism.HUMAN, Organism.MOUSE, Organism.FISH)));
     }
 
     @Test
-    public void testGetOrganismsToRun_NoOrganisms() {
+    public void testGetOrganismsToRunNoOrganisms() {
         HiPhiveOptions instance = HiPhiveOptions.builder()
                 .runParams("ppi")
                 .build();
@@ -377,7 +378,7 @@ public class HiPhiveOptionsTest {
     }
 
     @Test
-    public void testGetOrganismsToRun_NothingDefinedMeansAll() {
+    public void testGetOrganismsToRunNothingDefinedMeansAll() {
         HiPhiveOptions instance = HiPhiveOptions.builder()
                 .runParams("")
                 .build();
@@ -385,7 +386,7 @@ public class HiPhiveOptionsTest {
     }
 
     @Test
-    public void testGetOrganismsToRun_HumanMouseOnly() {
+    public void testGetOrganismsToRunHumanMouseOnly() {
         HiPhiveOptions instance = HiPhiveOptions.builder()
                 .runParams("human,mouse")
                 .build();
@@ -393,7 +394,7 @@ public class HiPhiveOptionsTest {
     }
 
     @Test
-    public void testGetOrganismsToRun_FishOnly() {
+    public void testGetOrganismsToRunFishOnly() {
         HiPhiveOptions instance = HiPhiveOptions.builder()
                 .runParams("fish")
                 .build();

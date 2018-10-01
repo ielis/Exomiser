@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,23 +20,15 @@
 
 package org.monarchinitiative.exomiser.core.analysis;
 
-import de.charite.compbio.jannovar.annotation.VariantEffect;
-import de.charite.compbio.jannovar.mendel.ModeOfInheritance;
-import de.charite.compbio.jannovar.pedigree.Pedigree;
-import htsjdk.variant.vcf.VCFFileReader;
 import htsjdk.variant.vcf.VCFHeader;
 import org.monarchinitiative.exomiser.core.analysis.util.*;
 import org.monarchinitiative.exomiser.core.filters.GeneFilter;
 import org.monarchinitiative.exomiser.core.filters.GeneFilterRunner;
 import org.monarchinitiative.exomiser.core.filters.VariantFilter;
 import org.monarchinitiative.exomiser.core.filters.VariantFilterRunner;
-import org.monarchinitiative.exomiser.core.genome.GeneFactory;
-import org.monarchinitiative.exomiser.core.genome.VariantDataService;
-import org.monarchinitiative.exomiser.core.genome.VariantFactory;
-import org.monarchinitiative.exomiser.core.model.Gene;
-import org.monarchinitiative.exomiser.core.model.RegulatoryFeature;
-import org.monarchinitiative.exomiser.core.model.TopologicalDomain;
-import org.monarchinitiative.exomiser.core.model.VariantEvaluation;
+import org.monarchinitiative.exomiser.core.genome.GenomeAnalysisService;
+import org.monarchinitiative.exomiser.core.genome.VcfFiles;
+import org.monarchinitiative.exomiser.core.model.*;
 import org.monarchinitiative.exomiser.core.prioritisers.Prioritiser;
 import org.monarchinitiative.exomiser.core.prioritisers.PriorityType;
 import org.slf4j.Logger;
@@ -64,40 +56,40 @@ abstract class AbstractAnalysisRunner implements AnalysisRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(AbstractAnalysisRunner.class);
 
-    private final GeneFactory geneFactory;
-    private final VariantFactory variantFactory;
+    //arguably this shouldn't even be exposed here...
+    private final GenomeAnalysisService genomeAnalysisService;
 
-    private final VariantDataService variantDataService;
-    final VariantFilterRunner variantFilterRunner;
+    protected final VariantFilterRunner variantFilterRunner;
     private final GeneFilterRunner geneFilterRunner;
 
-    public AbstractAnalysisRunner(GeneFactory geneFactory, VariantFactory variantFactory, VariantDataService variantDataService, VariantFilterRunner variantFilterRunner, GeneFilterRunner geneFilterRunner) {
-        this.geneFactory = geneFactory;
-        this.variantFactory = variantFactory;
-        this.variantDataService = variantDataService;
+    public AbstractAnalysisRunner(GenomeAnalysisService genomeAnalysisService, VariantFilterRunner variantFilterRunner, GeneFilterRunner geneFilterRunner) {
+        this.genomeAnalysisService = genomeAnalysisService;
+
         this.variantFilterRunner = variantFilterRunner;
         this.geneFilterRunner = geneFilterRunner;
     }
 
     @Override
     public AnalysisResults run(Analysis analysis) {
-
+        logger.info("Starting analysis");
+        logger.info("Using genome assembly {}", analysis.getGenomeAssembly());
+        //all the sample-related bits, might be worth encapsulating
         Path vcfPath = analysis.getVcfPath();
-        Path pedigreeFilePath = analysis.getPedPath();
 
-        logger.info("Setting up analysis for VCF and PED files: {}, {}", vcfPath, pedigreeFilePath);
-        VCFHeader vcfHeader = readVcfHeader(vcfPath);
+        VCFHeader vcfHeader = VcfFiles.readVcfHeader(vcfPath);
         List<String> sampleNames = vcfHeader.getGenotypeSamples();
+        logger.info("Checking proband and pedigree for VCF {}", vcfPath);
 
-        String probandSampleName = SampleNameChecker.getProbandSampleName(analysis.getProbandSampleName(), sampleNames);
-        int probandSampleId = SampleNameChecker.getProbandSampleId(probandSampleName, sampleNames);
+        SampleIdentifier probandSample = SampleIdentifierUtil.createProbandIdentifier(analysis.getProbandSampleName(), sampleNames);
+        Pedigree validatedPedigree = PedigreeSampleValidator.validate(analysis.getPedigree(), probandSample, sampleNames);
+        InheritanceModeOptions inheritanceModeOptions = analysis.getInheritanceModeOptions();
 
-        Pedigree pedigree = new PedigreeFactory().createPedigreeForSampleData(pedigreeFilePath, sampleNames);
-        ModeOfInheritance modeOfInheritance = analysis.getModeOfInheritance();
+        InheritanceModeAnnotator inheritanceModeAnnotator = new InheritanceModeAnnotator(validatedPedigree, inheritanceModeOptions);
 
-        logger.info("Running analysis for proband {} (sample {} in VCF) from samples: {}", probandSampleName, probandSampleId + 1, sampleNames);
-        Instant timeStart = Instant.now();
         List<String> hpoIds = analysis.getHpoIds();
+        //now run the analysis on the sample
+        logger.info("Running analysis for proband {} (sample {} in VCF) from samples: {}", probandSample.getId(), probandSample.getGenotypePosition() + 1, sampleNames);
+        Instant timeStart = Instant.now();
         //soo many comments - this is a bad sign that this is too complicated.
         Map<String, Gene> allGenes = makeKnownGenes();
         List<VariantEvaluation> variantEvaluations = new ArrayList<>();
@@ -112,12 +104,12 @@ abstract class AbstractAnalysisRunner implements AnalysisRunner {
             if (firstStep.isVariantFilter() && !variantsLoaded) {
                 //variants take up 99% of all the memory in an analysis - this scales approximately linearly with the sample size
                 //so for whole genomes this is best run as a stream to filter out the unwanted variants with as many filters as possible in one go
-                variantEvaluations = loadAndFilterVariants(vcfPath, allGenes, analysisGroup, analysis);
+                variantEvaluations = loadAndFilterVariants(vcfPath, probandSample, allGenes, analysisGroup, analysis);
                 //this is done here as there are GeneFilter steps which may require Variants in the genes, or the InheritanceModeDependent steps which definitely need them...
                 assignVariantsToGenes(variantEvaluations, allGenes);
                 variantsLoaded = true;
             } else {
-                runSteps(analysisGroup, hpoIds, new ArrayList<>(allGenes.values()), pedigree, modeOfInheritance);
+                runSteps(analysisGroup, hpoIds, new ArrayList<>(allGenes.values()), inheritanceModeAnnotator);
             }
         }
         //maybe only the non-variant dependent steps have been run in which case we need to load the variants although
@@ -133,19 +125,15 @@ abstract class AbstractAnalysisRunner implements AnalysisRunner {
         }
 
         logger.info("Scoring genes");
-        GeneScorer geneScorer = new RawScoreGeneScorer(probandSampleId, modeOfInheritance, pedigree);
+        GeneScorer geneScorer = new RawScoreGeneScorer(probandSample, inheritanceModeAnnotator);
         List<Gene> genes = geneScorer.scoreGenes(getGenesWithVariants(allGenes).collect(toList()));
         List<VariantEvaluation> variants = getFinalVariantList(variantEvaluations);
         logger.info("Analysed {} genes containing {} filtered variants", genes.size(), variants.size());
 
-        logger.info("Creating analysis results from VCF and PED files: {}, {}", vcfPath, pedigreeFilePath);
+        logger.info("Creating analysis results from VCF {}", vcfPath);
         AnalysisResults analysisResults = AnalysisResults.builder()
-                .vcfPath(vcfPath)
-                .pedPath(pedigreeFilePath)
-                .vcfHeader(vcfHeader)
-                .probandSampleName(probandSampleName)
-                .sampleNames(vcfHeader.getGenotypeSamples())
-                .pedigree(pedigree)
+                .probandSampleName(probandSample.getId())
+                .sampleNames(sampleNames)
                 .genes(genes)
                 .variantEvaluations(variants)
                 .build();
@@ -156,7 +144,16 @@ abstract class AbstractAnalysisRunner implements AnalysisRunner {
         return analysisResults;
     }
 
-    private List<VariantEvaluation> loadAndFilterVariants(Path vcfPath, Map<String, Gene> allGenes, List<AnalysisStep> analysisGroup, Analysis analysis) {
+    /**
+     * @return a map of genes indexed by gene symbol.
+     */
+    private Map<String, Gene> makeKnownGenes() {
+        return genomeAnalysisService.getKnownGenes()
+                .parallelStream()
+                .collect(toConcurrentMap(Gene::getGeneSymbol, Function.identity()));
+    }
+
+    private List<VariantEvaluation> loadAndFilterVariants(Path vcfPath, SampleIdentifier probandSample, Map<String, Gene> allGenes, List<AnalysisStep> analysisGroup, Analysis analysis) {
         GeneReassigner geneReassigner = createNonCodingVariantGeneReassigner(analysis, allGenes);
         List<VariantFilter> variantFilters = getVariantFilterSteps(analysisGroup);
 
@@ -165,6 +162,7 @@ abstract class AbstractAnalysisRunner implements AnalysisRunner {
         try (Stream<VariantEvaluation> variantStream = loadVariants(vcfPath)) {
             filteredVariants = variantStream
                     .peek(variantLogger.logLoadedAndPassedVariants())
+                    .filter(isObservedInProband(probandSample))
                     .map(reassignNonCodingVariantToBestGeneInJannovarAnnotations(geneReassigner))
                     .map(reassignNonCodingVariantToBestGeneInTad(geneReassigner))
                     .filter(isAssociatedWithKnownGene(allGenes))
@@ -177,7 +175,7 @@ abstract class AbstractAnalysisRunner implements AnalysisRunner {
     }
 
     private GeneReassigner createNonCodingVariantGeneReassigner(Analysis analysis, Map<String, Gene> allGenes) {
-        ChromosomalRegionIndex<TopologicalDomain> tadIndex = new ChromosomalRegionIndex<>(variantDataService.getTopologicallyAssociatedDomains());
+        ChromosomalRegionIndex<TopologicalDomain> tadIndex = genomeAnalysisService.getTopologicallyAssociatedDomainIndex();
         PriorityType mainPriorityType = analysis.getMainPrioritiserType();
         return new GeneReassigner(mainPriorityType, allGenes, tadIndex);
     }
@@ -193,19 +191,34 @@ abstract class AbstractAnalysisRunner implements AnalysisRunner {
                 .collect(toList());
     }
 
-    private Function<VariantEvaluation, VariantEvaluation> reassignNonCodingVariantToBestGeneInTad(GeneReassigner geneReassigner) {
-        //todo: this won't function correctly if run before a prioritiser has been run
+    private Stream<VariantEvaluation> loadVariants(Path vcfPath) {
+        //WARNING!!! THIS IS NOT THREADSAFE DO NOT USE PARALLEL STREAMS
+        return genomeAnalysisService.createVariantEvaluations(vcfPath);
+    }
+
+    private Predicate<VariantEvaluation> isObservedInProband(SampleIdentifier probandSample) {
         return variantEvaluation -> {
-            geneReassigner.reassignRegulatoryRegionVariantToMostPhenotypicallySimilarGeneInTad(variantEvaluation);
-            return variantEvaluation;
+            // need a nicer API for this.
+            SampleGenotype probandGenotype = variantEvaluation.getSampleGenotypes().get(probandSample.getId());
+            // a possible NPE here, but this really shouldn't happen, as the samples and pedigree should have been checked previously
+            // only add VariantEvaluation where the proband has an ALT allele (OTHER_ALT should be present as an ALT in another VariantEvaluation)
+            return probandGenotype.getCalls().contains(AlleleCall.ALT);
         };
     }
 
     private Function<VariantEvaluation, VariantEvaluation> reassignNonCodingVariantToBestGeneInJannovarAnnotations(GeneReassigner geneReassigner) {
         return variantEvaluation -> {
-            if (variantEvaluation.isNonCodingVariant()){
+            if (variantEvaluation.isNonCodingVariant()) {
                 geneReassigner.reassignGeneToMostPhenotypicallySimilarGeneInAnnotations(variantEvaluation);
             }
+            return variantEvaluation;
+        };
+    }
+
+    private Function<VariantEvaluation, VariantEvaluation> reassignNonCodingVariantToBestGeneInTad(GeneReassigner geneReassigner) {
+        // Caution! This won't function correctly if run before a prioritiser has been run
+        return variantEvaluation -> {
+            geneReassigner.reassignRegulatoryRegionVariantToMostPhenotypicallySimilarGeneInTad(variantEvaluation);
             return variantEvaluation;
         };
     }
@@ -230,42 +243,14 @@ abstract class AbstractAnalysisRunner implements AnalysisRunner {
      */
     abstract Predicate<VariantEvaluation> runVariantFilters(List<VariantFilter> variantFilters);
 
-    private Stream<VariantEvaluation> loadVariants(Path vcfPath) {
-        List<RegulatoryFeature> regulatoryFeatures = variantDataService.getRegulatoryFeatures();
-        ChromosomalRegionIndex<RegulatoryFeature> regulatoryRegionIndex = new ChromosomalRegionIndex<>(regulatoryFeatures);
-        logger.info("Loaded {} regulatory regions", regulatoryFeatures.size());
-        //WARNING!!! THIS IS NOT THREADSAFE DO NOT USE PARALLEL STREAMS
-        return variantFactory.streamVariantEvaluations(vcfPath).map(setRegulatoryRegionVariantEffect(regulatoryRegionIndex));
-    }
-
-    //Adds the missing REGULATORY_REGION_VARIANT effect to variants - this isn't in the Jannovar data set.
-    //This ought to move into the variantFactory/variantDataService
-    private Function<VariantEvaluation, VariantEvaluation> setRegulatoryRegionVariantEffect(ChromosomalRegionIndex<RegulatoryFeature> regulatoryRegionIndex) {
-        return variantEvaluation -> {
-            VariantEffect variantEffect = variantEvaluation.getVariantEffect();
-            //n.b this check here is important as ENSEMBLE can have regulatory regions overlapping with missense variants.
-            if (isIntergenicOrUpstreamOfGene(variantEffect) && regulatoryRegionIndex.hasRegionContainingVariant(variantEvaluation)) {
-                //the effect is the same for all regulatory regions, so for the sake of speed, just assign it here rather than look it up from the list
-                variantEvaluation.setVariantEffect(VariantEffect.REGULATORY_REGION_VARIANT);
-            }
-            return variantEvaluation;
-        };
-    }
-
-    private boolean isIntergenicOrUpstreamOfGene(VariantEffect variantEffect) {
-        return variantEffect == VariantEffect.INTERGENIC_VARIANT || variantEffect == VariantEffect.UPSTREAM_GENE_VARIANT;
-    }
-
-    private VCFHeader readVcfHeader(Path vcfFilePath) {
-        try (VCFFileReader vcfReader = new VCFFileReader(vcfFilePath.toFile(), false)) {
-            return vcfReader.getFileHeader();
-        }
-    }
-
     private void assignVariantsToGenes(List<VariantEvaluation> variantEvaluations, Map<String, Gene> allGenes) {
         for (VariantEvaluation variantEvaluation : variantEvaluations) {
             Gene gene = allGenes.get(variantEvaluation.getGeneSymbol());
-            gene.addVariant(variantEvaluation);
+            if (gene != null) {
+                // It is possible that the gene could be null if no filters have been run and the variant isn't assigned
+                // to a known gene (gene symbol  is '.')
+                gene.addVariant(variantEvaluation);
+            }
         }
     }
 
@@ -281,29 +266,26 @@ abstract class AbstractAnalysisRunner implements AnalysisRunner {
 
     abstract List<VariantEvaluation> getFinalVariantList(List<VariantEvaluation> variants);
 
-    /**
-     * @return a map of genes indexed by gene symbol.
-     */
-    private Map<String, Gene> makeKnownGenes() {
-        return geneFactory.createKnownGenes()
-                .parallelStream()
-                .collect(toConcurrentMap(Gene::getGeneSymbol, Function.identity()));
-    }
-
     //might this be a nascent class waiting to get out here?
-    private void runSteps(List<AnalysisStep> analysisSteps, List<String> hpoIds, List<Gene> genes, Pedigree pedigree, ModeOfInheritance modeOfInheritance) {
+    private void runSteps(List<AnalysisStep> analysisSteps, List<String> hpoIds, List<Gene> genes, InheritanceModeAnnotator inheritanceModeAnnotator) {
         boolean inheritanceModesCalculated = false;
         for (AnalysisStep analysisStep : analysisSteps) {
             if (!inheritanceModesCalculated && analysisStep.isInheritanceModeDependent()) {
-                analyseGeneCompatibilityWithInheritanceMode(genes, pedigree, modeOfInheritance);
+                analyseGeneCompatibilityWithInheritanceMode(genes, inheritanceModeAnnotator);
                 inheritanceModesCalculated = true;
             }
             runStep(analysisStep, hpoIds, genes);
         }
     }
 
+    private void analyseGeneCompatibilityWithInheritanceMode(List<Gene> genes, InheritanceModeAnnotator inheritanceModeAnnotator) {
+        logger.info("Checking inheritance mode compatibility with {} for genes which passed filters", inheritanceModeAnnotator.getDefinedModes());
+        InheritanceModeAnalyser inheritanceModeAnalyser = new InheritanceModeAnalyser(inheritanceModeAnnotator);
+        inheritanceModeAnalyser.analyseInheritanceModes(genes);
+    }
+
     private void runStep(AnalysisStep analysisStep, List<String> hpoIds, List<Gene> genes) {
-        if (analysisStep.isVariantFilter()) {
+        if (analysisStep instanceof VariantFilter) {
             VariantFilter filter = (VariantFilter) analysisStep;
             logger.info("Running VariantFilter: {}", filter);
             for (Gene gene : genes) {
@@ -312,24 +294,19 @@ abstract class AbstractAnalysisRunner implements AnalysisRunner {
             return;
 
         }
-        if (GeneFilter.class.isInstance(analysisStep)) {
+
+        if (analysisStep instanceof GeneFilter) {
             GeneFilter filter = (GeneFilter) analysisStep;
             logger.info("Running GeneFilter: {}", filter);
             geneFilterRunner.run(filter, genes);
             return;
         }
 
-        if (Prioritiser.class.isInstance(analysisStep)) {
+        if (analysisStep instanceof Prioritiser) {
             Prioritiser prioritiser = (Prioritiser) analysisStep;
             logger.info("Running Prioritiser: {}", prioritiser);
             prioritiser.prioritizeGenes(hpoIds, genes);
         }
-    }
-
-    private void analyseGeneCompatibilityWithInheritanceMode(List<Gene> genes, Pedigree pedigree, ModeOfInheritance modeOfInheritance) {
-        InheritanceModeAnalyser inheritanceModeAnalyser = new InheritanceModeAnalyser(modeOfInheritance, pedigree);
-        logger.info("Checking compatibility with {} inheritance mode for genes which passed filters", modeOfInheritance);
-        inheritanceModeAnalyser.analyseInheritanceModes(genes);
     }
 
     /**

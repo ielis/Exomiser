@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -27,6 +27,7 @@ package org.monarchinitiative.exomiser.core.writers;
 
 import com.google.common.collect.ImmutableSet;
 import de.charite.compbio.jannovar.annotation.VariantEffect;
+import de.charite.compbio.jannovar.mendel.ModeOfInheritance;
 import org.monarchinitiative.exomiser.core.analysis.Analysis;
 import org.monarchinitiative.exomiser.core.analysis.AnalysisResults;
 import org.monarchinitiative.exomiser.core.filters.FilterReport;
@@ -37,7 +38,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
-import java.util.*;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -57,21 +59,27 @@ public class ResultsWriterUtils {
     }
 
     /**
-     * Determines the correct file extension for a file given what was specified
-     * in the {@link org.monarchinitiative.exomiser.core.ExomiserSettings}.
+     * Determines the correct file extension for a file given that was specified by the user, or a sensible default if not.
      *
      * @param vcfPath
      * @param outputPrefix
      * @param outputFormat
-     * @return
+     * @param modeOfInheritance
+     * @return A filename based on either the user input, or one generated from the sample.
      */
-    public static String makeOutputFilename(Path vcfPath, String outputPrefix, OutputFormat outputFormat) {
+    public static String makeOutputFilename(Path vcfPath, String outputPrefix, OutputFormat outputFormat, ModeOfInheritance modeOfInheritance) {
+        String moiAbbreviation = moiAbbreviation(modeOfInheritance);
         if (outputPrefix.isEmpty()) {
-            String defaultOutputPrefix = String.format("%s/%s-exomiser-results", ResultsWriterUtils.DEFAULT_OUTPUT_DIR, vcfPath.getFileName());
+            String defaultOutputPrefix = String.format("%s/%s_exomiser", ResultsWriterUtils.DEFAULT_OUTPUT_DIR, vcfPath.getFileName());
             logger.debug("Output prefix was unspecified. Will write out to: {}", defaultOutputPrefix);
-            outputPrefix = defaultOutputPrefix;
+            return String.format("%s%s.%s", defaultOutputPrefix, moiAbbreviation, outputFormat.getFileExtension());
         }
-        return String.format("%s.%s", outputPrefix, outputFormat.getFileExtension());
+        return String.format("%s%s.%s", outputPrefix, moiAbbreviation, outputFormat.getFileExtension());
+    }
+
+    private static String moiAbbreviation(ModeOfInheritance modeOfInheritance) {
+        String moiAbbreviation = modeOfInheritance.getAbbreviation();
+        return moiAbbreviation == null ? "" : "_" + moiAbbreviation;
     }
 
     /**
@@ -82,17 +90,18 @@ public class ResultsWriterUtils {
      * @param variantEvaluations
      * @return
      */
-    public static List<VariantEffectCount> makeVariantEffectCounters(List<VariantEvaluation> variantEvaluations) {
+    public static List<VariantEffectCount> makeVariantEffectCounters(List<String> sampleNames, List<VariantEvaluation> variantEvaluations) {
 
         // all used Jannovar VariantEffects
-        final Set<VariantEffect> variantEffects = ImmutableSet.of(VariantEffect.FRAMESHIFT_ELONGATION,
+        final Set<VariantEffect> variantEffects = ImmutableSet.of(
+                VariantEffect.FRAMESHIFT_ELONGATION,
                 VariantEffect.FRAMESHIFT_TRUNCATION, VariantEffect.FRAMESHIFT_VARIANT,
                 VariantEffect.INTERNAL_FEATURE_ELONGATION, VariantEffect.FEATURE_TRUNCATION, VariantEffect.MNV,
                 VariantEffect.STOP_GAINED, VariantEffect.STOP_LOST, VariantEffect.START_LOST,
                 VariantEffect.SPLICE_ACCEPTOR_VARIANT, VariantEffect.SPLICE_DONOR_VARIANT,
-                VariantEffect.MISSENSE_VARIANT, VariantEffect.INFRAME_INSERTION,
-                VariantEffect.DISRUPTIVE_INFRAME_INSERTION, VariantEffect.INFRAME_DELETION,
-                VariantEffect.DISRUPTIVE_INFRAME_DELETION,
+                VariantEffect.MISSENSE_VARIANT,
+                VariantEffect.INFRAME_INSERTION, VariantEffect.DISRUPTIVE_INFRAME_INSERTION,
+                VariantEffect.INFRAME_DELETION, VariantEffect.DISRUPTIVE_INFRAME_DELETION,
                 VariantEffect.SPLICE_REGION_VARIANT, VariantEffect.STOP_RETAINED_VARIANT,
                 VariantEffect.INITIATOR_CODON_VARIANT, VariantEffect.SYNONYMOUS_VARIANT,
                 VariantEffect.FIVE_PRIME_UTR_TRUNCATION,
@@ -103,48 +112,11 @@ public class ResultsWriterUtils {
                 VariantEffect.THREE_PRIME_UTR_EXON_VARIANT,
                 VariantEffect.CODING_TRANSCRIPT_INTRON_VARIANT, VariantEffect.NON_CODING_TRANSCRIPT_EXON_VARIANT,
                 VariantEffect.NON_CODING_TRANSCRIPT_INTRON_VARIANT, VariantEffect.UPSTREAM_GENE_VARIANT,
-                VariantEffect.DOWNSTREAM_GENE_VARIANT, VariantEffect.INTERGENIC_VARIANT);
+                VariantEffect.DOWNSTREAM_GENE_VARIANT, VariantEffect.INTERGENIC_VARIANT,
+                VariantEffect.REGULATORY_REGION_VARIANT);
 
-        VariantEffectCounter variantTypeCounter = makeVariantEffectCounter(variantEvaluations);
-        final List<Map<VariantEffect, Integer>> freqMaps = variantTypeCounter.getFrequencyMap(variantEffects);
-
-        int numIndividuals = 0;
-        if (!variantEvaluations.isEmpty()) {
-            numIndividuals = variantEvaluations.get(0).getNumberOfIndividuals();
-        }
-
-        List<VariantEffectCount> result = new ArrayList<>();
-        Set<VariantEffect> effects = EnumSet.noneOf(VariantEffect.class);
-        for (int sampleIdx = 0; sampleIdx < numIndividuals; ++sampleIdx) {
-            effects.addAll(freqMaps.get(sampleIdx).keySet());
-        }
-        if (variantEvaluations.isEmpty()) {
-            effects.addAll(variantEffects);
-        }
-
-        for (VariantEffect effect : effects) {
-            List<Integer> typeSpecificCounts = new ArrayList<>();
-            for (int sampleIdx = 0; sampleIdx < numIndividuals; ++sampleIdx) {
-                typeSpecificCounts.add(freqMaps.get(sampleIdx).get(effect));
-            }
-            result.add(new VariantEffectCount(effect, typeSpecificCounts));
-        }
-
-        return result;
-    }
-
-    private static VariantEffectCounter makeVariantEffectCounter(List<VariantEvaluation> variantEvaluations) {
-        if (variantEvaluations.isEmpty()) {
-            return new VariantEffectCounter(0);
-        }
-
-        int numIndividuals = variantEvaluations.get(0).getNumberOfIndividuals();
-        VariantEffectCounter effectCounter = new VariantEffectCounter(numIndividuals);
-
-        for (VariantEvaluation variantEvaluation : variantEvaluations) {
-            effectCounter.put(variantEvaluation);
-        }
-        return effectCounter;
+        VariantEffectCounter variantEffectCounter = new VariantEffectCounter(sampleNames, variantEvaluations);
+        return variantEffectCounter.getVariantEffectCounts(variantEffects);
     }
 
     public static List<FilterReport> makeFilterReports(Analysis analysis, AnalysisResults analysisResults) {
@@ -154,7 +126,7 @@ public class ResultsWriterUtils {
     public static List<Gene> getMaxPassedGenes(List<Gene> genes, int maxGenes) {
         List<Gene> passedGenes = getPassedGenes(genes);
         if (maxGenes == 0) {
-            logger.info("Maximum gene limit set to {} - Returning all {} genes which have passed filtering.", maxGenes, passedGenes.size());
+            logger.debug("Maximum gene limit set to {} - Returning all {} genes which have passed filtering.", maxGenes, passedGenes.size());
             return passedGenes;
         }
         return getMaxGenes(passedGenes, maxGenes);
@@ -164,7 +136,7 @@ public class ResultsWriterUtils {
         List<Gene> passedGenes = genes.stream()
                 .filter(Gene::passedFilters)
                 .collect(Collectors.toList());
-        logger.info("{} of {} genes passed filters", passedGenes.size(), genes.size());
+        logger.debug("{} of {} genes passed filters", passedGenes.size(), genes.size());
         return passedGenes;
     }
 
@@ -172,7 +144,7 @@ public class ResultsWriterUtils {
         List<Gene> passedGenes = genes.stream()
                 .limit(maxGenes)
                 .collect(Collectors.toList());
-        logger.info("Maximum gene limit set to {} - Returning first {} of {} genes which have passed filtering.", maxGenes, maxGenes, genes.size());
+        logger.debug("Maximum gene limit set to {} - Returning first {} of {} genes which have passed filtering.", maxGenes, maxGenes, genes.size());
         return passedGenes;
     }
 

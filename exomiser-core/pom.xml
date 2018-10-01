@@ -1,36 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ The Exomiser - A tool to annotate and prioritize variants
+  ~ The Exomiser - A tool to annotate and prioritize genomic variants
   ~
-  ~ Copyright (C) 2012 - 2016  Charite Universitätsmedizin Berlin and Genome Research Ltd.
+  ~ Copyright (c) 2016-2018 Queen Mary University of London.
+  ~ Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
   ~
-  ~  This program is free software: you can redistribute it and/or modify
-  ~  it under the terms of the GNU Affero General Public License as
-  ~  published by the Free Software Foundation, either version 3 of the
-  ~  License, or (at your option) any later version.
+  ~ This program is free software: you can redistribute it and/or modify
+  ~ it under the terms of the GNU Affero General Public License as
+  ~ published by the Free Software Foundation, either version 3 of the
+  ~ License, or (at your option) any later version.
   ~
-  ~  This program is distributed in the hope that it will be useful,
-  ~  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  ~  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  ~  GNU Affero General Public License for more details.
+  ~ This program is distributed in the hope that it will be useful,
+  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~ GNU Affero General Public License for more details.
   ~
-  ~  You should have received a copy of the GNU Affero General Public License
-  ~  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  ~ You should have received a copy of the GNU Affero General Public License
+  ~ along with this program.  If not, see <http://www.gnu.org/licenses/>.
   -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    
+
     <artifactId>exomiser-core</artifactId>
     <packaging>jar</packaging>
     <name>exomiser-core</name>
 
-    <parent>    
-        <groupId>org.monarchinitiative</groupId>
+    <parent>
+        <groupId>org.monarchinitiative.exomiser</groupId>
         <artifactId>exomiser</artifactId>
-        <version>8.0.1</version>
+        <version>11.0.0-SNAPSHOT</version>
     </parent>
-
 
     <dependencies>
         <!--Jannovar is used for providing known gene annotations on variants -->
@@ -45,13 +46,18 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        <!--Guava 0.19 is required by Jannovar-->
+        <dependency>
+            <groupId>com.github.samtools</groupId>
+            <artifactId>htsjdk</artifactId>
+            <version>${htsjdk.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.jblas</groupId>
             <artifactId>jblas</artifactId>
             <version>1.2.3</version>
         </dependency>
         <!--Phenix dependencies:-->
+        <!-- possibly could be replaced by org.monarchinitiative.phenol-->
         <dependency>
             <groupId>de.sonumina</groupId>
             <artifactId>javautil</artifactId>
@@ -62,19 +68,6 @@
             <artifactId>ontologizer</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
-        <!--One day, maybe these can be replaced by the commented out dependencies, once this issue has been closed:-->
-        <!--https://github.com/ontologizer/ontologizerlib/issues/1-->
-        <!--<dependency>-->
-            <!--<groupId>de.ontologizer</groupId>-->
-            <!--<artifactId>ontologizerlib-core</artifactId>-->
-            <!--<version>0.1</version>-->
-        <!--</dependency>-->
-        <!--<dependency>-->
-            <!--<groupId>de.ontologizer</groupId>-->
-            <!--<artifactId>ontologizerlib-io</artifactId>-->
-            <!--<version>0.1</version>-->
-        <!--</dependency>-->
-
         <!--Thymeleaf is a templating engine used for creating the HTML results pages -->
         <dependency>
             <groupId>org.thymeleaf</groupId>
@@ -82,7 +75,7 @@
         </dependency>
         <dependency>
             <groupId>org.thymeleaf</groupId>
-            <artifactId>thymeleaf-spring4</artifactId>
+            <artifactId>thymeleaf-spring5</artifactId>
         </dependency>
         <dependency>
             <!-- jsoup HTML parser library @ http://jsoup.org/ -->
@@ -109,11 +102,6 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jdk7</artifactId>
             <version>2.6.7</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <type>jar</type>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -143,19 +131,46 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.mapdb</groupId>
-            <artifactId>mapdb</artifactId>
-            <version>1.0.8</version>
+            <groupId>org.skyscreamer</groupId>
+            <artifactId>jsonassert</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
-    
+
     <build>
-        <resources>          
+        <resources>
             <resource>
                 <directory>src/main/resources</directory>
                 <!--Use filtering so that maven will replace placeholders with values from the pom e.g. ${project.version} -->
                 <filtering>true</filtering>
             </resource>
         </resources>
+        <extensions>
+            <extension>
+                <groupId>kr.motd.maven</groupId>
+                <artifactId>os-maven-plugin</artifactId>
+                <version>1.5.0.Final</version>
+            </extension>
+        </extensions>
+        <plugins>
+            <plugin>
+                <groupId>org.xolstice.maven.plugins</groupId>
+                <artifactId>protobuf-maven-plugin</artifactId>
+                <version>0.5.1</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <protocArtifact>
+                        com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}
+                    </protocArtifact>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
     </build>
 </project>

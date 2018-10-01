@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2017 Queen Mary University of London.
+ * Copyright (c) 2016-2018 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -23,10 +23,13 @@ package org.monarchinitiative.exomiser.core.analysis;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import de.charite.compbio.jannovar.annotation.VariantEffect;
-import de.charite.compbio.jannovar.mendel.ModeOfInheritance;
+import org.monarchinitiative.exomiser.core.analysis.util.InheritanceModeOptions;
 import org.monarchinitiative.exomiser.core.filters.*;
-import org.monarchinitiative.exomiser.core.genome.VariantDataService;
+import org.monarchinitiative.exomiser.core.genome.GenomeAnalysisService;
+import org.monarchinitiative.exomiser.core.genome.GenomeAnalysisServiceProvider;
+import org.monarchinitiative.exomiser.core.genome.GenomeAssembly;
 import org.monarchinitiative.exomiser.core.model.GeneticInterval;
+import org.monarchinitiative.exomiser.core.model.Pedigree;
 import org.monarchinitiative.exomiser.core.model.frequency.FrequencySource;
 import org.monarchinitiative.exomiser.core.model.pathogenicity.PathogenicitySource;
 import org.monarchinitiative.exomiser.core.prioritisers.HiPhiveOptions;
@@ -49,22 +52,23 @@ public class AnalysisBuilder {
     private static final Logger logger = LoggerFactory.getLogger(AnalysisBuilder.class);
 
     private final PriorityFactory priorityFactory;
-    private final VariantDataService variantDataService;
+    private final GenomeAnalysisServiceProvider genomeAnalysisServiceProvider;
 
     private final Analysis.Builder builder;
 
     //Sample-related variables
     private List<String> hpoIds = new ArrayList<>();
-    private ModeOfInheritance modeOfInheritance = ModeOfInheritance.ANY;
+    private InheritanceModeOptions inheritanceModeOptions = InheritanceModeOptions.empty();
     //Source-data-related variables
+    private GenomeAnalysisService genomeAnalysisService;
     private Set<FrequencySource> frequencySources = EnumSet.noneOf(FrequencySource.class);
     private Set<PathogenicitySource> pathogenicitySources = EnumSet.noneOf(PathogenicitySource.class);
 
     private List<AnalysisStep> analysisSteps = new ArrayList<>();
 
-    AnalysisBuilder(PriorityFactory priorityFactory, VariantDataService variantDataService) {
+    AnalysisBuilder(PriorityFactory priorityFactory, GenomeAnalysisServiceProvider genomeAnalysisServiceProvider) {
         this.priorityFactory = priorityFactory;
-        this.variantDataService = variantDataService;
+        this.genomeAnalysisServiceProvider = genomeAnalysisServiceProvider;
         this.builder = Analysis.builder();
     }
 
@@ -79,8 +83,14 @@ public class AnalysisBuilder {
         return this;
     }
 
-    public AnalysisBuilder pedPath(Path pedPath) {
-        builder.pedPath(pedPath);
+    public AnalysisBuilder genomeAssembly(GenomeAssembly genomeAssembly) {
+        this.genomeAnalysisService = genomeAnalysisServiceProvider.get(genomeAssembly);
+        builder.genomeAssembly(genomeAssembly);
+        return this;
+    }
+
+    public AnalysisBuilder pedigree(Pedigree pedigree) {
+        builder.pedigree(pedigree);
         return this;
     }
 
@@ -95,9 +105,9 @@ public class AnalysisBuilder {
         return this;
     }
 
-    public AnalysisBuilder modeOfInheritance(ModeOfInheritance modeOfInheritance) {
-        this.modeOfInheritance = modeOfInheritance;
-        builder.modeOfInheritance(modeOfInheritance);
+    public AnalysisBuilder inheritanceModes(InheritanceModeOptions inheritanceModeOptions) {
+        this.inheritanceModeOptions = inheritanceModeOptions;
+        builder.inheritanceModeOptions(this.inheritanceModeOptions);
         return this;
     }
 
@@ -136,8 +146,8 @@ public class AnalysisBuilder {
         return this;
     }
 
-    public AnalysisBuilder addGeneIdFilter(Set<Integer> entrezIds) {
-        analysisSteps.add(new EntrezGeneIdFilter(new LinkedHashSet<>(entrezIds)));
+    public AnalysisBuilder addGeneIdFilter(Set<String> entrezIds) {
+        analysisSteps.add(new GeneSymbolFilter(new LinkedHashSet<>(entrezIds)));
         return this;
     }
 
@@ -160,10 +170,36 @@ public class AnalysisBuilder {
         if (frequencySources.isEmpty()) {
             throw new IllegalArgumentException("Frequency sources have not yet been defined. Add some frequency sources before defining the analysis steps.");
         }
-        return new FrequencyDataProvider(variantDataService, frequencySources, filter);
+        GenomeAnalysisService analysisService = getGenomeAnalysisService();
+        return new FrequencyDataProvider(analysisService, frequencySources, filter);
+    }
+
+    private GenomeAnalysisService getGenomeAnalysisService() {
+        if (genomeAnalysisService != null) {
+            return genomeAnalysisService;
+        }
+        throw new UndefinedGenomeAssemblyException("Genome assembly has not yet been defined. This is required before adding an assembly-dependant step.");
     }
 
     public AnalysisBuilder addFrequencyFilter(float cutOff) {
+        analysisSteps.add(makeFrequencyDependentStep(new FrequencyFilter(cutOff)));
+        return this;
+    }
+
+    /**
+     * Add a frequency filter using the maximum frequency for any defined mode of inheritance as the cut-off. Calling this
+     * method requires that the {@code inheritanceModes} method has already been called and supplied with a non-empty
+     * {@link InheritanceModeOptions} instance.
+     *
+     * @return an {@link AnalysisBuilder} with an added {@link FrequencyFilter} instantiated with the maximum
+     * frequency taken from the {@link InheritanceModeOptions}.
+     * @since 11.0.0
+     */
+    public AnalysisBuilder addFrequencyFilter() {
+        if (inheritanceModeOptions.isEmpty()) {
+            throw new IllegalArgumentException("Unable to add frequency filter with undefined max frequency without inheritanceModeOptions being set.");
+        }
+        float cutOff = inheritanceModeOptions.getMaxFreq();
         analysisSteps.add(makeFrequencyDependentStep(new FrequencyFilter(cutOff)));
         return this;
     }
@@ -177,7 +213,8 @@ public class AnalysisBuilder {
         if (pathogenicitySources.isEmpty()) {
             throw new IllegalArgumentException("Pathogenicity sources have not yet been defined. Add some pathogenicity sources before defining the analysis steps.");
         }
-        return new PathogenicityDataProvider(variantDataService, pathogenicitySources, pathogenicityFilter);
+        GenomeAnalysisService analysisService = getGenomeAnalysisService();
+        return new PathogenicityDataProvider(analysisService, pathogenicitySources, pathogenicityFilter);
     }
 
     public AnalysisBuilder addPriorityScoreFilter(PriorityType priorityType, float minPriorityScore) {
@@ -191,11 +228,11 @@ public class AnalysisBuilder {
     }
 
     public AnalysisBuilder addInheritanceFilter() {
-        if (modeOfInheritance == ModeOfInheritance.ANY) {
-            logger.info("Not adding an inheritance filter for {} mode of inheritance", modeOfInheritance);
+        if (inheritanceModeOptions == null || inheritanceModeOptions.isEmpty()) {
+            logger.info("Not adding an inheritance filter for undefined mode of inheritance");
             return this;
         }
-        analysisSteps.add(new InheritanceFilter(modeOfInheritance));
+        analysisSteps.add(new InheritanceFilter(inheritanceModeOptions.getDefinedModes()));
         return this;
     }
 
@@ -219,7 +256,7 @@ public class AnalysisBuilder {
     }
 
     public AnalysisBuilder addHiPhivePrioritiser() {
-        addPrioritiserStepIfHpoIdsNotEmpty(priorityFactory.makeHiPhivePrioritiser(HiPhiveOptions.DEFAULT));
+        addPrioritiserStepIfHpoIdsNotEmpty(priorityFactory.makeHiPhivePrioritiser(HiPhiveOptions.defaults()));
         return this;
     }
 
@@ -245,4 +282,5 @@ public class AnalysisBuilder {
         analysisSteps.add(analysisStep);
         return this;
     }
+
 }
