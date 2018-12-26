@@ -23,7 +23,6 @@ package org.monarchinitiative.exomiser.core.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import de.charite.compbio.jannovar.annotation.VariantEffect;
@@ -272,7 +271,7 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
                 gtStrings.set(i, "0/1");
             }
         }
-        return Joiner.on(":").join(gtStrings);
+        return String.join(":", gtStrings);
     }
 
     /**
@@ -436,7 +435,7 @@ public class VariantEvaluation implements Comparable<VariantEvaluation>, Filtera
     public float getPathogenicityScore() {
         float predictedScore = pathogenicityData.getScore();
         float variantEffectScore = VariantEffectPathogenicityScore.getPathogenicityScoreOf(variantEffect);
-            if (variantEffect == VariantEffect.MISSENSE_VARIANT) {
+        if (variantEffect == VariantEffect.MISSENSE_VARIANT) {
             // CAUTION! REVEL scores tend to be more nuanced and frequently lower thant either the default variant effect score
             // or the other predicted path scores, yet apparently are more concordant with ClinVar. For this reason it might be
             // best to check for a REVEL prediction and defer wholly to that if present rather than do the following.
