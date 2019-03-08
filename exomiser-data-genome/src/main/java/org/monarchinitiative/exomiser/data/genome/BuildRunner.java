@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2018 Queen Mary University of London.
+ * Copyright (c) 2016-2019 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -21,6 +21,7 @@
 package org.monarchinitiative.exomiser.data.genome;
 
 import org.monarchinitiative.exomiser.core.genome.GenomeAssembly;
+import org.monarchinitiative.exomiser.core.genome.jannovar.JannovarDataFactory;
 import org.monarchinitiative.exomiser.data.genome.model.AlleleResource;
 import org.monarchinitiative.exomiser.data.genome.model.BuildInfo;
 import org.slf4j.Logger;
@@ -52,8 +53,9 @@ public class BuildRunner implements ApplicationRunner {
     private final Map<String, AlleleResource> hg19AlleleResources;
     private final Path hg38GenomePath;
     private final Map<String, AlleleResource> hg38AlleleResources;
+    private final JannovarDataFactory jannovarDataFactory;
 
-    public BuildRunner(Path buildDir, Path hg19GenomePath, Map<String, AlleleResource> hg19AlleleResources, Path hg38GenomePath, Map<String, AlleleResource> hg38AlleleResources) {
+    public BuildRunner(Path buildDir, Path hg19GenomePath, Map<String, AlleleResource> hg19AlleleResources, Path hg38GenomePath, Map<String, AlleleResource> hg38AlleleResources, JannovarDataFactory jannovarDataFactory) {
         this.buildDir = buildDir;
 
         this.hg19GenomePath = hg19GenomePath;
@@ -61,6 +63,8 @@ public class BuildRunner implements ApplicationRunner {
 
         this.hg38GenomePath = hg38GenomePath;
         this.hg38AlleleResources = hg38AlleleResources;
+
+        this.jannovarDataFactory = jannovarDataFactory;
     }
 
     @Override
@@ -104,6 +108,11 @@ public class BuildRunner implements ApplicationRunner {
         logger.info("Downloading variant resources");
         userDefinedAlleleResources.parallelStream().forEach(AlleleResourceDownloader::download);
 
+        logger.info("Creating ClinVar variant whitelist");
+        AlleleResource clinVarResource = alleleResources.get("clinvar");
+        ClinVarWhiteListBuildRunner clinVarWhiteListBuildRunner = new ClinVarWhiteListBuildRunner(buildInfo, outPath, clinVarResource);
+        clinVarWhiteListBuildRunner.run();
+
         logger.info("Building variant database...");
         VariantDatabaseBuildRunner variantDatabaseBuildRunner = new VariantDatabaseBuildRunner(buildInfo, outPath, userDefinedAlleleResources);
         variantDatabaseBuildRunner.run();
@@ -113,6 +122,9 @@ public class BuildRunner implements ApplicationRunner {
         genomeDatabaseBuildRunner.run();
 
         // Add in Jannovar gubbins
+        logger.info("Building Jannovar transcript data...");
+        TranscriptDataBuildRunner transcriptDataBuildRunner = new TranscriptDataBuildRunner(buildInfo, jannovarDataFactory, outPath);
+        transcriptDataBuildRunner.run();
 
         logger.info("Finished build {}", buildInfo.getBuildString());
     }

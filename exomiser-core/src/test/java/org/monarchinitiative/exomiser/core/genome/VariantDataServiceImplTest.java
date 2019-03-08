@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2018 Queen Mary University of London.
+ * Copyright (c) 2016-2019 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,6 +20,7 @@
 
 package org.monarchinitiative.exomiser.core.genome;
 
+import com.google.common.collect.ImmutableSet;
 import de.charite.compbio.jannovar.annotation.VariantEffect;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,10 +28,9 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.monarchinitiative.exomiser.core.genome.dao.CaddDao;
-import org.monarchinitiative.exomiser.core.genome.dao.FrequencyDao;
-import org.monarchinitiative.exomiser.core.genome.dao.PathogenicityDao;
-import org.monarchinitiative.exomiser.core.genome.dao.RemmDao;
+import org.monarchinitiative.exomiser.core.genome.dao.*;
+import org.monarchinitiative.exomiser.core.model.AlleleProtoAdaptor;
+import org.monarchinitiative.exomiser.core.model.Variant;
 import org.monarchinitiative.exomiser.core.model.VariantEvaluation;
 import org.monarchinitiative.exomiser.core.model.frequency.Frequency;
 import org.monarchinitiative.exomiser.core.model.frequency.FrequencyData;
@@ -41,8 +41,7 @@ import org.monarchinitiative.exomiser.core.model.pathogenicity.*;
 import java.util.Collections;
 import java.util.EnumSet;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.notNullValue;
+import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 /**
@@ -79,7 +78,7 @@ public class VariantDataServiceImplTest {
             Frequency.of(FrequencySource.ESP_AFRICAN_AMERICAN, 100.0f)
     );
 
-    private static final PathogenicityData CADD_DATA = PathogenicityData.of(PathogenicityScore.of(PathogenicitySource.CADD, 1));
+    private static final PathogenicityData CADD_DATA = PathogenicityData.of(CaddScore.of(15f));
 
     private static final VariantEffect REGULATORY_REGION = VariantEffect.REGULATORY_REGION_VARIANT;
 
@@ -142,7 +141,7 @@ public class VariantDataServiceImplTest {
         variant = buildVariantOfType(VariantEffect.MISSENSE_VARIANT);
         PathogenicityData result = instance.getVariantPathogenicityData(variant, EnumSet.of(PathogenicitySource.CADD, PathogenicitySource.POLYPHEN));
 
-        assertThat(result, equalTo(PathogenicityData.of(PATH_CLINVAR_DATA, PolyPhenScore.of(1f), CaddScore.of(1f))));
+        assertThat(result, equalTo(PathogenicityData.of(PATH_CLINVAR_DATA, PolyPhenScore.of(1f), CaddScore.of(15f))));
     }
 
     @Test
@@ -174,7 +173,7 @@ public class VariantDataServiceImplTest {
     @Test
     public void serviceReturnsCaddAndNonCodingScoreForKnownNonCodingVariant() {
         variant = buildVariantOfType(VariantEffect.REGULATORY_REGION_VARIANT);
-        PathogenicityData expectedNcdsData = PathogenicityData.of(PATH_CLINVAR_DATA, CaddScore.of(1f), RemmScore.of(1f));
+        PathogenicityData expectedNcdsData = PathogenicityData.of(PATH_CLINVAR_DATA, CaddScore.of(15f), RemmScore.of(1f));
         Mockito.when(mockRemmDao.getPathogenicityData(variant)).thenReturn(expectedNcdsData);
         PathogenicityData result = instance.getVariantPathogenicityData(variant, EnumSet.of(PathogenicitySource.CADD, PathogenicitySource.REMM));
         assertThat(result, equalTo(expectedNcdsData));
@@ -254,4 +253,20 @@ public class VariantDataServiceImplTest {
         assertThat(result, equalTo(FrequencyData.empty()));
     }
 
+    @Test
+    void serviceReturnsDataAboutWhiteList() {
+        assertThat(instance.variantIsWhiteListed(variant), is(false));
+    }
+
+    @Test
+    void whiteListedVariant() {
+        Variant whiteListVariant = VariantEvaluation.builder(3, 12345, "A", "C").build();
+        Variant nonWhiteListVariant = VariantEvaluation.builder(3, 12345, "G", "T").build();
+
+        VariantWhiteList whiteList = InMemoryVariantWhiteList.of(ImmutableSet.of(AlleleProtoAdaptor.toAlleleKey(whiteListVariant)));
+        VariantDataServiceImpl instance = VariantDataServiceImpl.builder().variantWhiteList(whiteList).build();
+
+        assertThat(instance.variantIsWhiteListed(whiteListVariant), is(true));
+        assertThat(instance.variantIsWhiteListed(nonWhiteListVariant), is(false));
+    }
 }
