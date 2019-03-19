@@ -1,7 +1,7 @@
 /*
  * The Exomiser - A tool to annotate and prioritize genomic variants
  *
- * Copyright (c) 2016-2018 Queen Mary University of London.
+ * Copyright (c) 2016-2019 Queen Mary University of London.
  * Copyright (c) 2012-2016 Charité Universitätsmedizin Berlin and Genome Research Ltd.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -34,7 +34,9 @@ import java.util.*;
  */
 public class FrequencyData {
 
-    private static final FrequencyData EMPTY_DATA = new FrequencyData(RsId.empty(), Collections.emptyMap());
+    private static final FrequencyData EMPTY_DATA = new FrequencyData(RsId.empty(), Collections.emptyList());
+
+    private static final int NUM_FREQ_SOURCES = FrequencySource.values().length;
 
     private static final float VERY_RARE_SCORE = 1f;
     private static final float NOT_RARE_SCORE = 0f;
@@ -80,28 +82,48 @@ public class FrequencyData {
         for (Frequency frequency : frequencies) {
             Objects.requireNonNull(frequency, "frequency data cannot contain null element");
         }
-
-        Map<FrequencySource, Frequency> frequencySourceMap = new EnumMap<>(FrequencySource.class);
-        for (Frequency frequency : frequencies) {
-            frequencySourceMap.put(frequency.getSource(), frequency);
-        }
-
-        return new FrequencyData(rsId, frequencySourceMap);
+        return new FrequencyData(rsId, frequencies);
     }
 
-    private FrequencyData(RsId rsId, Map<FrequencySource, Frequency> knownFrequencies) {
+    private FrequencyData(RsId rsId, Collection<Frequency> frequencies) {
         this.rsId = rsId.getId();
 
-        this.size = knownFrequencies.size();
+        // use natural ordering by FrequencySource - this class is a kind of EnumMap, but we're using primitives to store
+        // the values. This means that duplicated FrequencySource will be overwritten. In practice this shouldn't happen
+        // as they are extracted from a map instance.
+        Frequency[] sorted = orderByFrequencySource(frequencies);
+
+        this.size = countNotNullFrequencies(sorted);
         this.sources = new FrequencySource[size];
         this.values = new float[size];
 
         int pos = 0;
-        for (Map.Entry<FrequencySource, Frequency> entry: knownFrequencies.entrySet()) {
-            sources[pos] = entry.getKey();
-            values[pos] = entry.getValue().getFrequency();
-            pos++;
+        for (Frequency entry : sorted) {
+            if (entry != null) {
+                sources[pos] = entry.getSource();
+                values[pos] = entry.getFrequency();
+                pos++;
+            }
         }
+    }
+
+    private Frequency[] orderByFrequencySource(Collection<Frequency> frequencies) {
+        Frequency[] sorted = new Frequency[NUM_FREQ_SOURCES];
+        for (Frequency frequency : frequencies) {
+            FrequencySource frequencySource = frequency.getSource();
+            sorted[frequencySource.ordinal()] = frequency;
+        }
+        return sorted;
+    }
+
+    private int countNotNullFrequencies(Frequency[] sorted) {
+        int notNull = 0;
+        for (Frequency frequency : sorted) {
+            if (frequency != null) {
+                notNull++;
+            }
+        }
+        return notNull;
     }
 
     //RSID ought to belong to the Variant, not the frequencyData, but its here for convenience
