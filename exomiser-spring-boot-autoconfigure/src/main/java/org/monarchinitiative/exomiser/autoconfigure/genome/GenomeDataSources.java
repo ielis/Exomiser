@@ -153,7 +153,8 @@ public class GenomeDataSources {
         // a string like '1902_hg19_splicing_ensembl'
         String dbFileName = String.format("%s_splicing_%s", genomeDataResolver.getVersionAssemblyPrefix(), genomeProperties.getTranscriptSource().toString());
         Path dbPath = genomeDataResolver.resolveAbsoluteResourcePath(dbFileName);
-        String startUpArgs = ";MODE=PostgreSQL;SCHEMA=SPLICING;DATABASE_TO_UPPER=FALSE;IFEXISTS=TRUE;AUTO_RECONNECT=TRUE;ACCESS_MODE_DATA=r;";
+        // TODO(jules) - do we need to adjust these arguments to make code to work better?
+        String startUpArgs = ";SCHEMA=SPLICING;IFEXISTS=TRUE;AUTO_RECONNECT=TRUE;ACCESS_MODE_DATA=r;";
         String jdbcUrl = String.format("jdbc:h2:file:%s%s", dbPath, startUpArgs);
 
         HikariConfig config = new HikariConfig();
