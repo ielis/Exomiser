@@ -57,6 +57,8 @@ public interface PathogenicityScore extends Comparable<PathogenicityScore> {
                 return RevelScore.of(score);
             case MPC:
                 return MpcScore.of(score);
+            case SPLICING:
+                return SplicingScore.of(score);
                 // TODO: Add MVP, ClinPred, PrimateAi, M-CAP,
             default:
                 return new BasePathogenicityScore(source, score);

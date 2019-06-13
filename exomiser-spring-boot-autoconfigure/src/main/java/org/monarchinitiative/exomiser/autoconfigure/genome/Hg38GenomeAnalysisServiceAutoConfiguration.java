@@ -25,6 +25,19 @@ import org.h2.mvstore.MVStore;
 import org.monarchinitiative.exomiser.autoconfigure.DataDirectoryAutoConfiguration;
 import org.monarchinitiative.exomiser.core.genome.*;
 import org.monarchinitiative.exomiser.core.genome.dao.*;
+import org.monarchinitiative.threes.core.data.ContigLengthDao;
+import org.monarchinitiative.threes.core.data.DbSplicingTranscriptSource;
+import org.monarchinitiative.threes.core.data.SplicingTranscriptSource;
+import org.monarchinitiative.threes.core.pwm.DbSplicingPositionalWeightMatrixParser;
+import org.monarchinitiative.threes.core.pwm.SplicingInformationContentAnnotator;
+import org.monarchinitiative.threes.core.pwm.SplicingPositionalWeightMatrixParser;
+import org.monarchinitiative.threes.core.reference.GenomeCoordinatesFlipper;
+import org.monarchinitiative.threes.core.reference.transcript.NaiveSplicingTranscriptLocator;
+import org.monarchinitiative.threes.core.reference.transcript.SplicingTranscriptLocator;
+import org.monarchinitiative.threes.core.scoring.SimpleSplicingEvaluator;
+import org.monarchinitiative.threes.core.scoring.SplicingEvaluator;
+import org.monarchinitiative.threes.core.scoring.scorers.RawScoringFactory;
+import org.monarchinitiative.threes.core.scoring.scorers.ScorerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -109,6 +122,23 @@ public class Hg38GenomeAnalysisServiceAutoConfiguration extends GenomeAnalysisSe
     @Override
     public CaddDao caddDao() {
         return new CaddDao(caddIndelTabixDataSource, caddSnvTabixDataSource);
+    }
+
+    @Bean("hg38splicingDao")
+    @Override
+    public PathogenicityDao splicingDao() {
+        ContigLengthDao contigLengthDao = new ContigLengthDao(splicingDataSource);
+        SplicingPositionalWeightMatrixParser pwmParser = new DbSplicingPositionalWeightMatrixParser(splicingDataSource);
+        SplicingTranscriptSource splicingTranscriptSource = new DbSplicingTranscriptSource(splicingDataSource, contigLengthDao.getContigLengths());
+
+        GenomeCoordinatesFlipper flipper = new GenomeCoordinatesFlipper(contigLengthDao.getContigLengths());
+        SplicingTranscriptLocator locator = new NaiveSplicingTranscriptLocator(pwmParser.getSplicingParameters(), flipper);
+        SplicingInformationContentAnnotator annotator = new SplicingInformationContentAnnotator(pwmParser.getDonorMatrix(), pwmParser.getAcceptorMatrix(), pwmParser.getSplicingParameters());
+
+        ScorerFactory scorerFactory = new RawScoringFactory(annotator);
+        SplicingEvaluator evaluator = new SimpleSplicingEvaluator(locator, scorerFactory);
+
+        return new SplicingDao(genomeSequenceAccessor, splicingTranscriptSource, evaluator);
     }
 
     @Bean("hg38testPathDao")

@@ -30,6 +30,9 @@ import org.monarchinitiative.exomiser.core.genome.dao.TabixDataSource;
 import org.monarchinitiative.exomiser.core.genome.dao.VariantWhiteList;
 import org.monarchinitiative.exomiser.core.genome.jannovar.JannovarDataSourceLoader;
 import org.monarchinitiative.exomiser.core.proto.AlleleProto;
+import org.monarchinitiative.threes.core.reference.fasta.GenomeSequenceAccessor;
+import org.monarchinitiative.threes.core.reference.fasta.InvalidFastaFileException;
+import org.monarchinitiative.threes.core.reference.fasta.PrefixHandlingGenomeSequenceAccessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,6 +55,9 @@ public class GenomeDataSourceLoader {
     private static final Logger logger = LoggerFactory.getLogger(GenomeDataSourceLoader.class);
 
     private final DataSource dataSource;
+    private final DataSource splicingDataSource;
+    private final GenomeSequenceAccessor genomeSequenceAccessor;
+
     private final JannovarData jannovarData;
     private final MVStore mvStore;
 
@@ -70,6 +76,8 @@ public class GenomeDataSourceLoader {
 
     private GenomeDataSourceLoader(GenomeDataSources genomeDataSources) {
         this.dataSource = genomeDataSources.getGenomeDataSource();
+        this.splicingDataSource = genomeDataSources.getSplicingDataSource();
+        this.genomeSequenceAccessor = getGenomeSequenceAccessorOrThrowRuntimeException(genomeDataSources);
 
         Path transcriptFilePath = genomeDataSources.getTranscriptFilePath();
         logger.debug("Loading transcript data from {}", transcriptFilePath);
@@ -86,6 +94,14 @@ public class GenomeDataSourceLoader {
         this.caddIndelTabixDataSource = getTabixDataSourceOrDefault("CADD InDel", genomeDataSources.getCaddIndelPath());
         this.remmTabixDataSource = getTabixDataSourceOrDefault("REMM", genomeDataSources.getRemmPath());
         this.testPathogenicityTabixDataSource = getTabixDataSourceOrDefault("TEST", genomeDataSources.getTestPathogenicityPath());
+    }
+
+    private GenomeSequenceAccessor getGenomeSequenceAccessorOrThrowRuntimeException(GenomeDataSources genomeDataSources) {
+        try {
+            return new PrefixHandlingGenomeSequenceAccessor(genomeDataSources.getGenomeFastaPath(), genomeDataSources.getGenomeFastaFaiPath());
+        } catch (InvalidFastaFileException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private VariantWhiteList loadVariantWhiteList(Optional<Path> variantWhiteListPath) {
@@ -141,6 +157,14 @@ public class GenomeDataSourceLoader {
 
     public DataSource getGenomeDataSource() {
         return dataSource;
+    }
+
+    public DataSource getSplicingDataSource() {
+        return splicingDataSource;
+    }
+
+    public GenomeSequenceAccessor getGenomeSequenceAccessor() {
+        return genomeSequenceAccessor;
     }
 
     public JannovarData getJannovarData() {

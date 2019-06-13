@@ -52,6 +52,7 @@ public enum PathogenicitySource {
     MPC,
     MVP,
     PRIMATE_AI,
+    SPLICING,
     // An unspecified source for use in testing new pathogenicity scores
     TEST;
 }

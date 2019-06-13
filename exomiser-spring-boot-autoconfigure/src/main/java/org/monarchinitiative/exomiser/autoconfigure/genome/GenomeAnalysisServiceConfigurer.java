@@ -26,6 +26,7 @@ import org.monarchinitiative.exomiser.core.genome.*;
 import org.monarchinitiative.exomiser.core.genome.dao.*;
 import org.monarchinitiative.exomiser.core.model.ChromosomalRegionIndex;
 import org.monarchinitiative.exomiser.core.model.RegulatoryFeature;
+import org.monarchinitiative.threes.core.reference.fasta.GenomeSequenceAccessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,6 +49,8 @@ public abstract class GenomeAnalysisServiceConfigurer implements GenomeAnalysisS
     private final GenomeProperties genomeProperties;
 
     protected final DataSource dataSource;
+    protected final DataSource splicingDataSource;
+    protected final GenomeSequenceAccessor genomeSequenceAccessor;
     protected final JannovarData jannovarData;
     protected final MVStore mvStore;
 
@@ -68,6 +71,8 @@ public abstract class GenomeAnalysisServiceConfigurer implements GenomeAnalysisS
         GenomeDataSources genomeDataSources = GenomeDataSources.from(genomeProperties, exomiserDataDirectory);
         GenomeDataSourceLoader genomeDataSourceLoader = GenomeDataSourceLoader.load(genomeDataSources);
         this.dataSource = genomeDataSourceLoader.getGenomeDataSource();
+        this.splicingDataSource = genomeDataSourceLoader.getSplicingDataSource();
+        this.genomeSequenceAccessor = genomeDataSourceLoader.getGenomeSequenceAccessor();
         this.jannovarData = genomeDataSourceLoader.getJannovarData();
         this.mvStore = genomeDataSourceLoader.getMvStore();
 
@@ -107,6 +112,7 @@ public abstract class GenomeAnalysisServiceConfigurer implements GenomeAnalysisS
                 .localFrequencyDao(localFrequencyDao())
                 .remmDao(remmDao())
                 .caddDao(caddDao())
+                .splicingDao(splicingDao())
                 .testPathScoreDao(testPathScoreDao())
                 .variantWhiteList(variantWhiteList)
                 .build();

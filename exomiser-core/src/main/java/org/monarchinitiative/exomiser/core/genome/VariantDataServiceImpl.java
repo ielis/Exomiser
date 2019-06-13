@@ -60,6 +60,7 @@ public class VariantDataServiceImpl implements VariantDataService {
     private final FrequencyDao localFrequencyDao;
     private final PathogenicityDao caddDao;
     private final PathogenicityDao remmDao;
+    private final PathogenicityDao splicingDao;
     private final PathogenicityDao testPathScoreDao;
 
     private VariantDataServiceImpl(Builder builder) {
@@ -72,6 +73,7 @@ public class VariantDataServiceImpl implements VariantDataService {
         this.localFrequencyDao = builder.localFrequencyDao;
         this.caddDao = builder.caddDao;
         this.remmDao = builder.remmDao;
+        this.splicingDao = builder.splicingDao;
         this.testPathScoreDao = builder.testPathScoreDao;
     }
 
@@ -146,6 +148,11 @@ public class VariantDataServiceImpl implements VariantDataService {
             daosToQuery.add(caddDao);
         }
 
+        // SPLICING - super shiny splicing scores
+        if (pathogenicitySources.contains(PathogenicitySource.SPLICING)) {
+            daosToQuery.add(splicingDao);
+        }
+
         if (pathogenicitySources.contains(PathogenicitySource.TEST)) {
             daosToQuery.add(testPathScoreDao);
         }
@@ -170,6 +177,7 @@ public class VariantDataServiceImpl implements VariantDataService {
 
         private PathogenicityDao caddDao;
         private PathogenicityDao remmDao;
+        private PathogenicityDao splicingDao;
         private PathogenicityDao testPathScoreDao;
 
         public Builder variantWhiteList(VariantWhiteList variantWhiteList) {
@@ -199,6 +207,11 @@ public class VariantDataServiceImpl implements VariantDataService {
 
         public Builder remmDao(PathogenicityDao remmDao) {
             this.remmDao = remmDao;
+            return this;
+        }
+
+        public Builder splicingDao(PathogenicityDao splicingDao) {
+            this.splicingDao = splicingDao;
             return this;
         }
 

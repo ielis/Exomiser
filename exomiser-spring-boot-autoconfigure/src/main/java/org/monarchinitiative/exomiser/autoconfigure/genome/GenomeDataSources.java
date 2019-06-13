@@ -46,6 +46,9 @@ public class GenomeDataSources {
     private Path transcriptFilePath;
     private Path mvStorePath;
     private DataSource genomeDataSource;
+    private DataSource splicingDataSource;
+    private Path genomeFastaPath;
+    private Path genomeFastaFaiPath;
 
     private Path variantWhiteListPath;
 
@@ -74,6 +77,9 @@ public class GenomeDataSources {
         Path transcriptFilePath = buildTranscriptPath(genomeProperties, genomeDataResolver);
         Path mvStoreFilePath = buildMvStorePath(genomeDataResolver);
         DataSource genomeDataSource = buildGenomeDataSource(genomeProperties, genomeDataResolver);
+        DataSource splicingDataSource = buildSplicingDataSource(genomeProperties, genomeDataResolver);
+        Path genomeFastaPath = buildGenomeFastaPath(genomeDataResolver);
+        Path genomeFastaFaiPath = buildGenomeFastaFaiPath(genomeDataResolver);
 
         Path variantWhiteListPath = resolvePathOrNullIfEmpty(genomeProperties.getVariantWhiteListPath(), genomeDataResolver);
 
@@ -88,6 +94,9 @@ public class GenomeDataSources {
                 .transcriptFilePath(transcriptFilePath)
                 .mvStorePath(mvStoreFilePath)
                 .genomeDataSource(genomeDataSource)
+                .splicingDataSource(splicingDataSource)
+                .genomeFastaPath(genomeFastaPath)
+                .genomeFastaFaiPath(genomeFastaFaiPath)
                 .variantWhiteListPath(variantWhiteListPath)
                 .localFrequencyPath(localFreqPath)
                 .caddSnvPath(caddSnvPath)
@@ -95,6 +104,16 @@ public class GenomeDataSources {
                 .remmPath(remmPath)
                 .testPathogenicityScorePath(testPathogenicityPath)
                 .build();
+    }
+
+    private static Path buildGenomeFastaFaiPath(GenomeDataResolver genomeDataResolver) {
+        String fastaIdxFileName = String.format("%s.fa.fai", genomeDataResolver.getVersionAssemblyPrefix());
+        return genomeDataResolver.getGenomeAssemblyDataPath().resolve(fastaIdxFileName);
+    }
+
+    private static Path buildGenomeFastaPath(GenomeDataResolver genomeDataResolver) {
+        String fastaFileName = String.format("%s.fa", genomeDataResolver.getVersionAssemblyPrefix());
+        return genomeDataResolver.getGenomeAssemblyDataPath().resolve(fastaFileName);
     }
 
     private static Path buildTranscriptPath(GenomeProperties genomeProperties, GenomeDataResolver genomeDataResolver) {
@@ -129,6 +148,25 @@ public class GenomeDataSources {
         return new HikariDataSource(config);
     }
 
+    private static DataSource buildSplicingDataSource(GenomeProperties genomeProperties, GenomeDataResolver genomeDataResolver) {
+
+        // a string like '1902_hg19_splicing_ensembl'
+        String dbFileName = String.format("%s_splicing_%s", genomeDataResolver.getVersionAssemblyPrefix(), genomeProperties.getTranscriptSource().toString());
+        Path dbPath = genomeDataResolver.resolveAbsoluteResourcePath(dbFileName);
+        String startUpArgs = ";MODE=PostgreSQL;SCHEMA=SPLICING;DATABASE_TO_UPPER=FALSE;IFEXISTS=TRUE;AUTO_RECONNECT=TRUE;ACCESS_MODE_DATA=r;";
+        String jdbcUrl = String.format("jdbc:h2:file:%s%s", dbPath, startUpArgs);
+
+        HikariConfig config = new HikariConfig();
+        config.setDriverClassName("org.h2.Driver");
+        config.setJdbcUrl(jdbcUrl);
+        config.setUsername("sa");
+        config.setPassword("");
+        config.setMaximumPoolSize(3);
+        config.setPoolName(String.format("exomiser-splicing-%s-%s", genomeProperties.getAssembly(), genomeProperties.getDataVersion()));
+
+        return new HikariDataSource(config);
+    }
+
     private static Path resolvePathOrNullIfEmpty(String pathToTabixGzFile, GenomeDataResolver genomeDataResolver) {
         if (pathToTabixGzFile == null || pathToTabixGzFile.isEmpty()) {
             return null;
@@ -139,6 +177,9 @@ public class GenomeDataSources {
     private GenomeDataSources(Builder builder) {
         this.transcriptFilePath = builder.transcriptFilePath;
         this.genomeDataSource = builder.genomeDataSource;
+        this.splicingDataSource = builder.splicingDataSource;
+        this.genomeFastaPath = builder.genomeFastaPath;
+        this.genomeFastaFaiPath = builder.genomeFastaFaiPath;
         this.mvStorePath = builder.mvStorePath;
 
         this.variantWhiteListPath = builder.variantWhiteListPath;
@@ -160,6 +201,18 @@ public class GenomeDataSources {
 
     public DataSource getGenomeDataSource() {
         return genomeDataSource;
+    }
+
+    public DataSource getSplicingDataSource() {
+        return splicingDataSource;
+    }
+
+    public Path getGenomeFastaPath() {
+        return genomeFastaPath;
+    }
+
+    public Path getGenomeFastaFaiPath() {
+        return genomeFastaFaiPath;
     }
 
     public Optional<Path> getVariantWhiteListPath() {
@@ -232,6 +285,10 @@ public class GenomeDataSources {
         private Path mvStorePath;
         private DataSource genomeDataSource;
 
+        private DataSource splicingDataSource;
+        private Path genomeFastaPath;
+        private Path genomeFastaFaiPath;
+
         //These are all expected to be null as they are optional data sources
         private Path variantWhiteListPath;
         private Path localFrequencyPath = null;
@@ -255,6 +312,24 @@ public class GenomeDataSources {
         public Builder genomeDataSource(DataSource genomeDataSource) {
             Objects.requireNonNull(genomeDataSource);
             this.genomeDataSource = genomeDataSource;
+            return this;
+        }
+
+        public Builder splicingDataSource(DataSource splicingDataSource) {
+            Objects.requireNonNull(splicingDataSource);
+            this.splicingDataSource = splicingDataSource;
+            return this;
+        }
+
+        public Builder genomeFastaPath(Path genomeFastaPath) {
+            Objects.requireNonNull(genomeFastaPath);
+            this.genomeFastaPath = genomeFastaPath;
+            return this;
+        }
+
+        public Builder genomeFastaFaiPath(Path genomeFastaFaiPath) {
+            Objects.requireNonNull(genomeFastaFaiPath);
+            this.genomeFastaFaiPath = genomeFastaFaiPath;
             return this;
         }
 
@@ -308,6 +383,9 @@ public class GenomeDataSources {
             Objects.requireNonNull(transcriptFilePath);
             Objects.requireNonNull(mvStorePath);
             Objects.requireNonNull(genomeDataSource);
+            Objects.requireNonNull(splicingDataSource);
+            Objects.requireNonNull(genomeFastaPath);
+            Objects.requireNonNull(genomeFastaFaiPath);
             return new GenomeDataSources(this);
         }
     }
