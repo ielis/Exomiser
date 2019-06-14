@@ -36,7 +36,7 @@ import org.monarchinitiative.threes.core.reference.transcript.NaiveSplicingTrans
 import org.monarchinitiative.threes.core.reference.transcript.SplicingTranscriptLocator;
 import org.monarchinitiative.threes.core.scoring.SimpleSplicingEvaluator;
 import org.monarchinitiative.threes.core.scoring.SplicingEvaluator;
-import org.monarchinitiative.threes.core.scoring.scorers.RawScoringFactory;
+import org.monarchinitiative.threes.core.scoring.scorers.ScalingScorerFactory;
 import org.monarchinitiative.threes.core.scoring.scorers.ScorerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -134,10 +134,10 @@ public class Hg19GenomeAnalysisServiceAutoConfiguration extends GenomeAnalysisSe
         SplicingTranscriptLocator locator = new NaiveSplicingTranscriptLocator(pwmParser.getSplicingParameters(), flipper);
 
         SplicingInformationContentAnnotator annotator = new SplicingInformationContentAnnotator(pwmParser.getDonorMatrix(), pwmParser.getAcceptorMatrix(), pwmParser.getSplicingParameters());
-        ScorerFactory scorerFactory = new RawScoringFactory(annotator);
-        SplicingEvaluator evaluator = new SimpleSplicingEvaluator(locator, scorerFactory);
+        ScorerFactory scorerFactory = new ScalingScorerFactory(annotator);
+        SplicingEvaluator splicingEvaluator = new SimpleSplicingEvaluator(locator, scorerFactory);
 
-        return new SplicingDao(genomeSequenceAccessor, splicingTranscriptSource, evaluator);
+        return new SplicingDao(genomeSequenceAccessor, splicingTranscriptSource, splicingEvaluator);
     }
 
     @Bean("hg19testPathDao")

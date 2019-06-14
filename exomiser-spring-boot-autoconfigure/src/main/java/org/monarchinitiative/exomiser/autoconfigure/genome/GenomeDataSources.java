@@ -149,7 +149,6 @@ public class GenomeDataSources {
     }
 
     private static DataSource buildSplicingDataSource(GenomeProperties genomeProperties, GenomeDataResolver genomeDataResolver) {
-
         // a string like '1902_hg19_splicing_ensembl'
         String dbFileName = String.format("%s_splicing_%s", genomeDataResolver.getVersionAssemblyPrefix(), genomeProperties.getTranscriptSource().toString());
         Path dbPath = genomeDataResolver.resolveAbsoluteResourcePath(dbFileName);
@@ -384,9 +383,6 @@ public class GenomeDataSources {
             Objects.requireNonNull(transcriptFilePath);
             Objects.requireNonNull(mvStorePath);
             Objects.requireNonNull(genomeDataSource);
-            Objects.requireNonNull(splicingDataSource);
-            Objects.requireNonNull(genomeFastaPath);
-            Objects.requireNonNull(genomeFastaFaiPath);
             return new GenomeDataSources(this);
         }
     }

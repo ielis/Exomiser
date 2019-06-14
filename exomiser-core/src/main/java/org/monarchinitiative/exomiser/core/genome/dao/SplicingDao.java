@@ -14,7 +14,6 @@ import org.monarchinitiative.threes.core.reference.fasta.GenomeSequenceAccessor;
 import org.monarchinitiative.threes.core.scoring.SplicingEvaluator;
 import org.monarchinitiative.threes.core.scoring.SplicingPathogenicityData;
 
-
 import java.util.Optional;
 
 /**
@@ -51,18 +50,18 @@ public class SplicingDao implements PathogenicityDao {
 
     @Override
     public PathogenicityData getPathogenicityData(Variant variant) {
-        // we require functional annotations to be performed before calling this method
+        // we require functional annotation to be performed before calling this method, since we do not score off transcript
+        // variants
         if (!variant.hasTranscriptAnnotations()) {
             return PathogenicityData.empty();
         }
 
-        // the variant must affect transcript region
-        final VariantEffect ve = variant.getVariantEffect();
+        VariantEffect ve = variant.getVariantEffect();
         if (ve.isOffTranscript()) {
             return PathogenicityData.empty();
         }
 
-        final Optional<TranscriptAnnotation> txOpt = variant.getTranscriptAnnotations().stream()
+        Optional<TranscriptAnnotation> txOpt = variant.getTranscriptAnnotations().stream()
                 .filter(tx -> tx.getVariantEffect().equals(ve))
                 .findFirst();
 
@@ -72,11 +71,11 @@ public class SplicingDao implements PathogenicityDao {
             return PathogenicityData.empty();
         }
 
-        // splicing annotations will be calculated with respect to this transcript annotation
-        final TranscriptAnnotation ta = txOpt.get();
+        // splicing annotations will be calculated with respect to this transcript accession
+        String txAccession = txOpt.get().getAccession();
 
         Optional<SplicingTranscript> transcriptOptional = splicingTranscriptSource.fetchTranscripts(variant.getChromosomeName(), variant.getPosition(), variant.getPosition()).stream()
-                .filter(t -> t.getAccessionId().equals(ta.getAccession()))
+                .filter(t -> t.getAccessionId().equals(txAccession))
                 .findFirst();
 
         if (!transcriptOptional.isPresent()) {

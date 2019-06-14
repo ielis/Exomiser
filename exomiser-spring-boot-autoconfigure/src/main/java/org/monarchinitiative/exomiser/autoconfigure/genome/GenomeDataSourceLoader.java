@@ -55,30 +55,36 @@ public class GenomeDataSourceLoader {
     private static final Logger logger = LoggerFactory.getLogger(GenomeDataSourceLoader.class);
 
     private final DataSource dataSource;
+
     private final DataSource splicingDataSource;
+
     private final GenomeSequenceAccessor genomeSequenceAccessor;
 
     private final JannovarData jannovarData;
+
     private final MVStore mvStore;
 
     private final VariantWhiteList variantWhiteList;
 
     //TabixDataSources
     private final TabixDataSource localFrequencyTabixDataSource;
-    private final TabixDataSource caddSnvTabixDataSource;
-    private final TabixDataSource caddIndelTabixDataSource;
-    private final TabixDataSource remmTabixDataSource;
-    private final TabixDataSource testPathogenicityTabixDataSource;
 
-    public static GenomeDataSourceLoader load(GenomeDataSources genomeDataSources) {
-        return new GenomeDataSourceLoader(genomeDataSources);
-    }
+    private final TabixDataSource caddSnvTabixDataSource;
+
+    private final TabixDataSource caddIndelTabixDataSource;
+
+    private final TabixDataSource remmTabixDataSource;
+
+    private final TabixDataSource testPathogenicityTabixDataSource;
 
     private GenomeDataSourceLoader(GenomeDataSources genomeDataSources) {
         this.dataSource = genomeDataSources.getGenomeDataSource();
+        // TODO(jules) - could we make sure that we achieve a similar behavior to other optional resources?
         this.splicingDataSource = genomeDataSources.getSplicingDataSource();
         this.genomeSequenceAccessor = getGenomeSequenceAccessorOrThrowRuntimeException(genomeDataSources);
-
+        if (splicingDataSource == null || genomeSequenceAccessor == null) {
+            logger.warn("Data for SPLICING analysis is not configured. THIS WILL LEAD TO ERRORS IF REQUIRED DURING ANALYSIS. Check the application.properties is pointing to a valid file.");
+        }
         Path transcriptFilePath = genomeDataSources.getTranscriptFilePath();
         logger.debug("Loading transcript data from {}", transcriptFilePath);
         this.jannovarData = JannovarDataSourceLoader.loadJannovarData(transcriptFilePath);
@@ -96,11 +102,20 @@ public class GenomeDataSourceLoader {
         this.testPathogenicityTabixDataSource = getTabixDataSourceOrDefault("TEST", genomeDataSources.getTestPathogenicityPath());
     }
 
+    public static GenomeDataSourceLoader load(GenomeDataSources genomeDataSources) {
+        return new GenomeDataSourceLoader(genomeDataSources);
+    }
+
     private GenomeSequenceAccessor getGenomeSequenceAccessorOrThrowRuntimeException(GenomeDataSources genomeDataSources) {
         try {
+            /* This GenomeSequenceAccessor will try to satisfy both queries like `chrX:10-20`, and `X:10-20`. In order to
+            do so, it requires presence of FASTA index (fai), where contig names are specified. The accessor will work
+            if either all contig names are prefixed or all names are non-prefixed. If the FASTA index contains mixed
+            notations, an InvalidFastaFileException will be thrown.
+            */
             return new PrefixHandlingGenomeSequenceAccessor(genomeDataSources.getGenomeFastaPath(), genomeDataSources.getGenomeFastaFaiPath());
         } catch (InvalidFastaFileException e) {
-            throw new RuntimeException(e);
+            return null;
         }
     }
 
@@ -110,7 +125,7 @@ public class GenomeDataSourceLoader {
             logger.info("Loading variant whitelist from: {}", whiteListPath);
             // this should be a tabix-indexed gzip file
             ImmutableSet.Builder<AlleleProto.AlleleKey> whiteListBuilder = new ImmutableSet.Builder<>();
-            try(BufferedReader  bufferedReader = new BufferedReader(new InputStreamReader(new GZIPInputStream(Files.newInputStream(whiteListPath)), StandardCharsets.UTF_8))){
+            try (BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(new GZIPInputStream(Files.newInputStream(whiteListPath)), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = bufferedReader.readLine()) != null) {
                     if (line.startsWith("#")) {
