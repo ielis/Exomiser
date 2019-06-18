@@ -87,7 +87,7 @@ public class SplicingDao implements PathogenicityDao {
 
         // get FASTA sequence neighboring variant
         int begin = variant.getPosition() - 50;
-        int end = variant.getPosition() + 50;
+        int end = variant.getPosition() + variant.getRef().length() + 50;
         SequenceInterval sequenceInterval = genomeSequenceAccessor.fetchSequence(variant.getChromosomeName(), begin, end, true);
 
 
