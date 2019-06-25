@@ -50,6 +50,11 @@ public class SplicingDao implements PathogenicityDao {
 
     @Override
     public PathogenicityData getPathogenicityData(Variant variant) {
+        // from some reason variants with '*' allele are submitted to be evaluated here
+        if (!(variant.getRef().matches("[ACGTacgt]+") && variant.getAlt().matches("[ACGTacgt]+"))) {
+            return PathogenicityData.empty();
+        }
+
         // we require functional annotation to be performed before calling this method, since we do not score off transcript
         // variants
         if (!variant.hasTranscriptAnnotations()) {
@@ -85,10 +90,10 @@ public class SplicingDao implements PathogenicityDao {
 
         final SplicingTranscript transcript = transcriptOptional.get();
 
-        // get FASTA sequence neighboring variant
-        int begin = variant.getPosition() - 50;
-        int end = variant.getPosition() + variant.getRef().length() + 50;
-        SequenceInterval sequenceInterval = genomeSequenceAccessor.fetchSequence(variant.getChromosomeName(), begin, end, true);
+        // get FASTA sequence of transcript
+        SequenceInterval sequenceInterval = genomeSequenceAccessor.fetchSequence(variant.getChromosomeName(),
+                transcript.getTxBegin() - 50, transcript.getTxEnd() + 50,
+                transcript.getStrand());
 
 
         final SplicingVariant splv = makeVariant(variant);
