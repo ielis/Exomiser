@@ -25,19 +25,22 @@ import org.h2.mvstore.MVStore;
 import org.monarchinitiative.exomiser.autoconfigure.DataDirectoryAutoConfiguration;
 import org.monarchinitiative.exomiser.core.genome.*;
 import org.monarchinitiative.exomiser.core.genome.dao.*;
+import org.monarchinitiative.threes.core.calculators.ic.DbSplicingPositionalWeightMatrixParser;
+import org.monarchinitiative.threes.core.calculators.ic.SplicingInformationContentCalculator;
+import org.monarchinitiative.threes.core.calculators.ic.SplicingPositionalWeightMatrixParser;
+import org.monarchinitiative.threes.core.calculators.sms.DbSmsDao;
+import org.monarchinitiative.threes.core.calculators.sms.SMSCalculator;
+import org.monarchinitiative.threes.core.calculators.sms.SMSParser;
 import org.monarchinitiative.threes.core.data.ContigLengthDao;
 import org.monarchinitiative.threes.core.data.DbSplicingTranscriptSource;
 import org.monarchinitiative.threes.core.data.SplicingTranscriptSource;
-import org.monarchinitiative.threes.core.pwm.DbSplicingPositionalWeightMatrixParser;
-import org.monarchinitiative.threes.core.pwm.SplicingInformationContentAnnotator;
-import org.monarchinitiative.threes.core.pwm.SplicingPositionalWeightMatrixParser;
 import org.monarchinitiative.threes.core.reference.GenomeCoordinatesFlipper;
 import org.monarchinitiative.threes.core.reference.transcript.NaiveSplicingTranscriptLocator;
 import org.monarchinitiative.threes.core.reference.transcript.SplicingTranscriptLocator;
+import org.monarchinitiative.threes.core.scoring.ScalingScorerFactory;
+import org.monarchinitiative.threes.core.scoring.ScorerFactory;
 import org.monarchinitiative.threes.core.scoring.SimpleSplicingEvaluator;
 import org.monarchinitiative.threes.core.scoring.SplicingEvaluator;
-import org.monarchinitiative.threes.core.scoring.scorers.ScalingScorerFactory;
-import org.monarchinitiative.threes.core.scoring.scorers.ScorerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -127,15 +130,23 @@ public class Hg19GenomeAnalysisServiceAutoConfiguration extends GenomeAnalysisSe
     @Bean("hg19splicingDao")
     @Override
     public SplicingDao splicingDao() {
+        // basic objects
         ContigLengthDao contigLengthDao = new ContigLengthDao(splicingDataSource);
-        SplicingPositionalWeightMatrixParser pwmParser = new DbSplicingPositionalWeightMatrixParser(splicingDataSource);
-        SplicingTranscriptSource splicingTranscriptSource = new DbSplicingTranscriptSource(splicingDataSource, contigLengthDao.getContigLengths());
         GenomeCoordinatesFlipper flipper = new GenomeCoordinatesFlipper(contigLengthDao.getContigLengths());
-        SplicingTranscriptLocator locator = new NaiveSplicingTranscriptLocator(pwmParser.getSplicingParameters(), flipper);
 
-        SplicingInformationContentAnnotator annotator = new SplicingInformationContentAnnotator(pwmParser.getDonorMatrix(), pwmParser.getAcceptorMatrix(), pwmParser.getSplicingParameters());
-        ScorerFactory scorerFactory = new ScalingScorerFactory(annotator);
-        SplicingEvaluator splicingEvaluator = new SimpleSplicingEvaluator(locator, scorerFactory);
+        // information content calculator for evaluation of donor & acceptor sites
+        SplicingPositionalWeightMatrixParser pwmParser = new DbSplicingPositionalWeightMatrixParser(splicingDataSource);
+        SplicingTranscriptLocator locator = new NaiveSplicingTranscriptLocator(pwmParser.getSplicingParameters());
+        SplicingInformationContentCalculator icCalculator = new SplicingInformationContentCalculator(pwmParser.getDonorMatrix(), pwmParser.getAcceptorMatrix(), pwmParser.getSplicingParameters());
+
+        // septamer evaluator for ESE/ESS variants
+        SMSParser smsParser = new DbSmsDao(splicingDataSource);
+        SMSCalculator smsCalculator = new SMSCalculator(smsParser.getSeptamerMap());
+
+
+        ScorerFactory scorerFactory = new ScalingScorerFactory(icCalculator, smsCalculator);
+        SplicingEvaluator splicingEvaluator = new SimpleSplicingEvaluator(scorerFactory, locator, flipper);
+        SplicingTranscriptSource splicingTranscriptSource = new DbSplicingTranscriptSource(splicingDataSource);
 
         return new SplicingDao(genomeSequenceAccessor, splicingTranscriptSource, splicingEvaluator);
     }

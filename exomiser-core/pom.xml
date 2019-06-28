@@ -77,13 +77,7 @@
         <dependency>
             <groupId>org.monarchinitiative.threes</groupId>
             <artifactId>threes-core</artifactId>
-            <version>1.0.2</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-starter-data-jpa</artifactId>
-                </exclusion>
-            </exclusions>
+            <version>1.0.3</version>
         </dependency>
         <!--Thymeleaf is a templating engine used for creating the HTML results pages -->
         <dependency>
