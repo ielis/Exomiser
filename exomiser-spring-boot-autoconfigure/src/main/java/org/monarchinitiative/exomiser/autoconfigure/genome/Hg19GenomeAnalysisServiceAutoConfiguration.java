@@ -20,11 +20,13 @@
 
 package org.monarchinitiative.exomiser.autoconfigure.genome;
 
+import com.google.common.collect.ImmutableMap;
 import de.charite.compbio.jannovar.data.JannovarData;
 import org.h2.mvstore.MVStore;
 import org.monarchinitiative.exomiser.autoconfigure.DataDirectoryAutoConfiguration;
 import org.monarchinitiative.exomiser.core.genome.*;
 import org.monarchinitiative.exomiser.core.genome.dao.*;
+import org.monarchinitiative.threes.core.Utils;
 import org.monarchinitiative.threes.core.calculators.ic.DbSplicingPositionalWeightMatrixParser;
 import org.monarchinitiative.threes.core.calculators.ic.SplicingInformationContentCalculator;
 import org.monarchinitiative.threes.core.calculators.ic.SplicingPositionalWeightMatrixParser;
@@ -37,10 +39,7 @@ import org.monarchinitiative.threes.core.data.SplicingTranscriptSource;
 import org.monarchinitiative.threes.core.reference.GenomeCoordinatesFlipper;
 import org.monarchinitiative.threes.core.reference.transcript.NaiveSplicingTranscriptLocator;
 import org.monarchinitiative.threes.core.reference.transcript.SplicingTranscriptLocator;
-import org.monarchinitiative.threes.core.scoring.ScalingScorerFactory;
-import org.monarchinitiative.threes.core.scoring.ScorerFactory;
-import org.monarchinitiative.threes.core.scoring.SimpleSplicingEvaluator;
-import org.monarchinitiative.threes.core.scoring.SplicingEvaluator;
+import org.monarchinitiative.threes.core.scoring.*;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -48,6 +47,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
 import java.nio.file.Path;
+import java.util.function.UnaryOperator;
 
 /**
  * @author Jules Jacobsen <j.jacobsen@qmul.ac.uk>
@@ -130,10 +130,11 @@ public class Hg19GenomeAnalysisServiceAutoConfiguration extends GenomeAnalysisSe
     @Bean("hg19splicingDao")
     @Override
     public SplicingDao splicingDao() {
-        // basic objects
+        // 1 - basic objects
         ContigLengthDao contigLengthDao = new ContigLengthDao(splicingDataSource);
         GenomeCoordinatesFlipper flipper = new GenomeCoordinatesFlipper(contigLengthDao.getContigLengths());
 
+        // 2 - calculators/evaluators
         // information content calculator for evaluation of donor & acceptor sites
         SplicingPositionalWeightMatrixParser pwmParser = new DbSplicingPositionalWeightMatrixParser(splicingDataSource);
         SplicingTranscriptLocator locator = new NaiveSplicingTranscriptLocator(pwmParser.getSplicingParameters());
@@ -143,11 +144,23 @@ public class Hg19GenomeAnalysisServiceAutoConfiguration extends GenomeAnalysisSe
         SMSParser smsParser = new DbSmsDao(splicingDataSource);
         SMSCalculator smsCalculator = new SMSCalculator(smsParser.getSeptamerMap());
 
-
-        ScorerFactory scorerFactory = new ScalingScorerFactory(icCalculator, smsCalculator);
+        // 3 - scorers
+        RawScorerFactory rawScorerFactory = new RawScorerFactory(icCalculator, smsCalculator, 50, 50);
+        // TODO - MANY HARDCODED VALUES ARE PRESENT HERE
+        ImmutableMap<ScoringStrategy, UnaryOperator<Double>> scalerMap = ImmutableMap.<ScoringStrategy, UnaryOperator<Double>>builder()
+                .put(ScoringStrategy.CANONICAL_DONOR, Utils.sigmoidScaler(0.29, -1))
+                .put(ScoringStrategy.CRYPTIC_DONOR, Utils.sigmoidScaler(-5.52, -1))
+                .put(ScoringStrategy.CRYPTIC_DONOR_IN_CANONICAL_POSITION, Utils.sigmoidScaler(-4.56, -1))
+                .put(ScoringStrategy.CANONICAL_ACCEPTOR, Utils.sigmoidScaler(-1.50, -1))
+                .put(ScoringStrategy.CRYPTIC_ACCEPTOR, Utils.sigmoidScaler(-8.24, -1))
+                .put(ScoringStrategy.CRYPTIC_ACCEPTOR_IN_CANONICAL_POSITION, Utils.sigmoidScaler(-4.59, -1))
+                .put(ScoringStrategy.SMS, UnaryOperator.identity()) // TODO - decide how to scale the scores
+                .build();
+        ScorerFactory scorerFactory = new ScalingScorerFactory(rawScorerFactory, scalerMap);
         SplicingEvaluator splicingEvaluator = new SimpleSplicingEvaluator(scorerFactory, locator, flipper);
         SplicingTranscriptSource splicingTranscriptSource = new DbSplicingTranscriptSource(splicingDataSource);
 
+        // 4 - DAO (finally)
         return new SplicingDao(genomeSequenceAccessor, splicingTranscriptSource, splicingEvaluator);
     }
 
