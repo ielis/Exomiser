@@ -80,7 +80,7 @@ public class VariantFactoryImpl implements VariantFactory {
      * alternate allele.
      */
     private Function<VariantContext, Stream<VariantEvaluation>> toVariantEvaluations() {
-        return variantContext ->  variantContext.getAlternateAlleles().stream()
+        return variantContext -> variantContext.getAlternateAlleles().stream()
                     .map(buildAlleleVariantEvaluations(variantContext))
                     .flatMap(Collection::stream);
             // TODO: is this easier to use if we have streams all the way down rather than dealing with lists?

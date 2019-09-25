@@ -192,6 +192,12 @@ public class VariantEvaluationTest {
     }
 
     @Test
+    void testGetIdWithNull() {
+        VariantEvaluation withId = testVariantBuilder().id(null).build();
+        assertThat(withId.getId(), equalTo(""));
+    }
+
+    @Test
     void testGeneSymbolCannotBeNull() {
         assertThrows(NullPointerException.class, () ->
                 testVariantBuilder()
