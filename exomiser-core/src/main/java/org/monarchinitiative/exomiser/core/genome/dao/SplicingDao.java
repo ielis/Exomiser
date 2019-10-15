@@ -15,11 +15,17 @@ import org.monarchinitiative.threes.core.scoring.SplicingEvaluator;
 import org.monarchinitiative.threes.core.scoring.SplicingPathogenicityData;
 
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  *
  */
 public class SplicingDao implements PathogenicityDao {
+
+    /**
+     * We only score variants with REF and ALT alleles that match this pattern
+     */
+    private static final Pattern ALLELE_REGEXP = Pattern.compile("[ACGTacgt]+");
 
     private final GenomeSequenceAccessor genomeSequenceAccessor;
 
@@ -35,6 +41,12 @@ public class SplicingDao implements PathogenicityDao {
         this.splicingEvaluator = splicingEvaluator;
     }
 
+    /**
+     * Turn Exomiser's variant representation into 3S's variant object.
+     *
+     * @param variant Exomiser variant representation
+     * @return 3S representation of the variant
+     */
     private static SplicingVariant makeVariant(Variant variant) {
         return SplicingVariant.newBuilder()
                 .setCoordinates(GenomeCoordinates.newBuilder()
@@ -50,8 +62,10 @@ public class SplicingDao implements PathogenicityDao {
 
     @Override
     public PathogenicityData getPathogenicityData(Variant variant) {
+        // TODO - add check for structural variant
+
         // from some reason variants with '*' allele are submitted to be evaluated here
-        if (!(variant.getRef().matches("[ACGTacgt]+") && variant.getAlt().matches("[ACGTacgt]+"))) {
+        if (!(ALLELE_REGEXP.matcher(variant.getAlt()).matches() && ALLELE_REGEXP.matcher(variant.getRef()).matches())) {
             return PathogenicityData.empty();
         }
 
