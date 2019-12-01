@@ -26,9 +26,9 @@ import org.monarchinitiative.exomiser.core.genome.*;
 import org.monarchinitiative.exomiser.core.genome.dao.*;
 import org.monarchinitiative.exomiser.core.model.ChromosomalRegionIndex;
 import org.monarchinitiative.exomiser.core.model.RegulatoryFeature;
-import org.monarchinitiative.threes.core.reference.fasta.GenomeSequenceAccessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import xyz.ielis.hyperutil.reference.fasta.GenomeSequenceAccessor;
 
 import javax.annotation.PreDestroy;
 import javax.sql.DataSource;

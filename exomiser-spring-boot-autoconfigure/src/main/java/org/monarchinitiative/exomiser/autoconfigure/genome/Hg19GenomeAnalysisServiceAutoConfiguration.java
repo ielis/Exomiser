@@ -27,19 +27,19 @@ import org.monarchinitiative.exomiser.autoconfigure.DataDirectoryAutoConfigurati
 import org.monarchinitiative.exomiser.core.genome.*;
 import org.monarchinitiative.exomiser.core.genome.dao.*;
 import org.monarchinitiative.threes.core.Utils;
-import org.monarchinitiative.threes.core.calculators.ic.DbSplicingPositionalWeightMatrixParser;
 import org.monarchinitiative.threes.core.calculators.ic.SplicingInformationContentCalculator;
-import org.monarchinitiative.threes.core.calculators.ic.SplicingPositionalWeightMatrixParser;
-import org.monarchinitiative.threes.core.calculators.sms.DbSmsDao;
 import org.monarchinitiative.threes.core.calculators.sms.SMSCalculator;
-import org.monarchinitiative.threes.core.calculators.sms.SMSParser;
-import org.monarchinitiative.threes.core.data.ContigLengthDao;
 import org.monarchinitiative.threes.core.data.DbSplicingTranscriptSource;
 import org.monarchinitiative.threes.core.data.SplicingTranscriptSource;
-import org.monarchinitiative.threes.core.reference.GenomeCoordinatesFlipper;
+import org.monarchinitiative.threes.core.data.ic.DbSplicingPositionalWeightMatrixParser;
+import org.monarchinitiative.threes.core.data.ic.SplicingPositionalWeightMatrixParser;
+import org.monarchinitiative.threes.core.data.ic.SplicingPwmData;
+import org.monarchinitiative.threes.core.data.sms.DbSmsDao;
+import org.monarchinitiative.threes.core.data.sms.SMSParser;
 import org.monarchinitiative.threes.core.reference.transcript.NaiveSplicingTranscriptLocator;
 import org.monarchinitiative.threes.core.reference.transcript.SplicingTranscriptLocator;
-import org.monarchinitiative.threes.core.scoring.*;
+import org.monarchinitiative.threes.core.scoring.SplicingEvaluator;
+import org.monarchinitiative.threes.core.scoring.sparse.*;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -130,21 +130,18 @@ public class Hg19GenomeAnalysisServiceAutoConfiguration extends GenomeAnalysisSe
     @Bean("hg19splicingDao")
     @Override
     public SplicingDao splicingDao() {
-        // 1 - basic objects
-        ContigLengthDao contigLengthDao = new ContigLengthDao(splicingDataSource);
-        GenomeCoordinatesFlipper flipper = new GenomeCoordinatesFlipper(contigLengthDao.getContigLengths());
-
-        // 2 - calculators/evaluators
+        // 1 - calculators/evaluators
         // information content calculator for evaluation of donor & acceptor sites
         SplicingPositionalWeightMatrixParser pwmParser = new DbSplicingPositionalWeightMatrixParser(splicingDataSource);
-        SplicingTranscriptLocator locator = new NaiveSplicingTranscriptLocator(pwmParser.getSplicingParameters());
-        SplicingInformationContentCalculator icCalculator = new SplicingInformationContentCalculator(pwmParser.getDonorMatrix(), pwmParser.getAcceptorMatrix(), pwmParser.getSplicingParameters());
+        SplicingPwmData splicingPwmData = pwmParser.getSplicingPwmData();
+        SplicingTranscriptLocator locator = new NaiveSplicingTranscriptLocator(splicingPwmData.getParameters());
+        SplicingInformationContentCalculator icCalculator = new SplicingInformationContentCalculator(splicingPwmData);
 
         // septamer evaluator for ESE/ESS variants
         SMSParser smsParser = new DbSmsDao(splicingDataSource);
         SMSCalculator smsCalculator = new SMSCalculator(smsParser.getSeptamerMap());
 
-        // 3 - scorers
+        // 2 - scorers
         RawScorerFactory rawScorerFactory = new RawScorerFactory(icCalculator, smsCalculator, 50, 50);
         // TODO - MANY HARDCODED VALUES ARE PRESENT HERE
         ImmutableMap<ScoringStrategy, UnaryOperator<Double>> scalerMap = ImmutableMap.<ScoringStrategy, UnaryOperator<Double>>builder()
@@ -157,11 +154,12 @@ public class Hg19GenomeAnalysisServiceAutoConfiguration extends GenomeAnalysisSe
                 .put(ScoringStrategy.SMS, UnaryOperator.identity()) // TODO - decide how to scale the scores
                 .build();
         ScorerFactory scorerFactory = new ScalingScorerFactory(rawScorerFactory, scalerMap);
-        SplicingEvaluator splicingEvaluator = new SimpleSplicingEvaluator(scorerFactory, locator, flipper);
+        SplicingEvaluator splicingEvaluator = new SparseSplicingEvaluator(scorerFactory, locator);
+
         SplicingTranscriptSource splicingTranscriptSource = new DbSplicingTranscriptSource(splicingDataSource);
 
-        // 4 - DAO (finally)
-        return new SplicingDao(genomeSequenceAccessor, splicingTranscriptSource, splicingEvaluator);
+        // 3 - DAO (finally)
+        return new SplicingDao(genomeSequenceAccessor, splicingTranscriptSource, splicingEvaluator, jannovarData.getRefDict());
     }
 
     @Bean("hg19testPathDao")

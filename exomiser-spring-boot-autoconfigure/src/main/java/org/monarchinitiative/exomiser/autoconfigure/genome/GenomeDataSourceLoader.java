@@ -30,11 +30,11 @@ import org.monarchinitiative.exomiser.core.genome.dao.TabixDataSource;
 import org.monarchinitiative.exomiser.core.genome.dao.VariantWhiteList;
 import org.monarchinitiative.exomiser.core.genome.jannovar.JannovarDataSourceLoader;
 import org.monarchinitiative.exomiser.core.proto.AlleleProto;
-import org.monarchinitiative.threes.core.reference.fasta.GenomeSequenceAccessor;
-import org.monarchinitiative.threes.core.reference.fasta.InvalidFastaFileException;
-import org.monarchinitiative.threes.core.reference.fasta.PrefixHandlingGenomeSequenceAccessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import xyz.ielis.hyperutil.reference.fasta.GenomeSequenceAccessor;
+import xyz.ielis.hyperutil.reference.fasta.GenomeSequenceAccessorBuilder;
+import xyz.ielis.hyperutil.reference.fasta.InvalidFastaFileException;
 
 import javax.sql.DataSource;
 import java.io.BufferedReader;
@@ -113,9 +113,13 @@ public class GenomeDataSourceLoader {
             if either all contig names are prefixed or all names are non-prefixed. If the FASTA index contains mixed
             notations, an InvalidFastaFileException will be thrown.
             */
-            return new PrefixHandlingGenomeSequenceAccessor(genomeDataSources.getGenomeFastaPath(), genomeDataSources.getGenomeFastaFaiPath());
+            return GenomeSequenceAccessorBuilder.builder()
+                    .setFastaPath(genomeDataSources.getGenomeFastaPath())
+                    .setFastaFaiPath(genomeDataSources.getGenomeFastaFaiPath())
+                    .setFastaDictPath(genomeDataSources.getGenomeFastaDictPath())
+                    .build();
         } catch (InvalidFastaFileException e) {
-            return null;
+            throw new RuntimeException(e);
         }
     }
 

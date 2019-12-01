@@ -49,16 +49,33 @@ public class GenomeDataSources {
     private DataSource splicingDataSource;
     private Path genomeFastaPath;
     private Path genomeFastaFaiPath;
-
+    private Path genomeFastaDictPath;
     private Path variantWhiteListPath;
-
     // Tabix files
     private Path localFrequencyPath;
     private Path caddSnvPath;
     private Path caddIndelPath;
     private Path remmPath;
-
     private Path testPathogenicityScorePath;
+
+    private GenomeDataSources(Builder builder) {
+        this.transcriptFilePath = builder.transcriptFilePath;
+        this.genomeDataSource = builder.genomeDataSource;
+        this.splicingDataSource = builder.splicingDataSource;
+        this.genomeFastaPath = builder.genomeFastaPath;
+        this.genomeFastaFaiPath = builder.genomeFastaFaiPath;
+        this.genomeFastaDictPath = builder.genomeFastaDictPath;
+        this.mvStorePath = builder.mvStorePath;
+
+        this.variantWhiteListPath = builder.variantWhiteListPath;
+
+        this.localFrequencyPath = builder.localFrequencyPath;
+        this.caddSnvPath = builder.caddSnvPath;
+        this.caddIndelPath = builder.caddIndelPath;
+        this.remmPath = builder.remmPath;
+        this.testPathogenicityScorePath = builder.testPathogenicityPath;
+    }
+
     /**
      * Static constructor which will automatically resolve the resources for the supplied {@code GenomeProperties} where
      * the data directory for the data version and genome assembly are to be found on the {@code exomiserDataDirectory}
@@ -149,8 +166,8 @@ public class GenomeDataSources {
     }
 
     private static DataSource buildSplicingDataSource(GenomeProperties genomeProperties, GenomeDataResolver genomeDataResolver) {
-        // a string like '1902_hg19_splicing_ensembl'
-        String dbFileName = String.format("%s_splicing_%s", genomeDataResolver.getVersionAssemblyPrefix(), genomeProperties.getTranscriptSource().toString());
+        // a string like '1902_hg19_splicing'
+        String dbFileName = String.format("%s_splicing", genomeDataResolver.getVersionAssemblyPrefix());
         Path dbPath = genomeDataResolver.resolveAbsoluteResourcePath(dbFileName);
         // TODO(jules) - do we need to adjust these arguments to make code to work better?
         String startUpArgs = ";SCHEMA=SPLICING;IFEXISTS=TRUE;AUTO_RECONNECT=TRUE;ACCESS_MODE_DATA=r;";
@@ -160,7 +177,7 @@ public class GenomeDataSources {
         config.setDriverClassName("org.h2.Driver");
         config.setJdbcUrl(jdbcUrl);
         config.setUsername("sa");
-        config.setPassword("");
+        config.setPassword("sa");
         config.setMaximumPoolSize(3);
         config.setPoolName(String.format("exomiser-splicing-%s-%s", genomeProperties.getAssembly(), genomeProperties.getDataVersion()));
 
@@ -174,21 +191,8 @@ public class GenomeDataSources {
         return genomeDataResolver.resolveAbsoluteResourcePath(pathToTabixGzFile);
     }
 
-    private GenomeDataSources(Builder builder) {
-        this.transcriptFilePath = builder.transcriptFilePath;
-        this.genomeDataSource = builder.genomeDataSource;
-        this.splicingDataSource = builder.splicingDataSource;
-        this.genomeFastaPath = builder.genomeFastaPath;
-        this.genomeFastaFaiPath = builder.genomeFastaFaiPath;
-        this.mvStorePath = builder.mvStorePath;
-
-        this.variantWhiteListPath = builder.variantWhiteListPath;
-
-        this.localFrequencyPath = builder.localFrequencyPath;
-        this.caddSnvPath = builder.caddSnvPath;
-        this.caddIndelPath = builder.caddIndelPath;
-        this.remmPath = builder.remmPath;
-        this.testPathogenicityScorePath = builder.testPathogenicityPath;
+    public static Builder builder() {
+        return new Builder();
     }
 
     public Path getTranscriptFilePath() {
@@ -213,6 +217,10 @@ public class GenomeDataSources {
 
     public Path getGenomeFastaFaiPath() {
         return genomeFastaFaiPath;
+    }
+
+    public Path getGenomeFastaDictPath() {
+        return genomeFastaDictPath;
     }
 
     public Optional<Path> getVariantWhiteListPath() {
@@ -275,10 +283,6 @@ public class GenomeDataSources {
                 '}';
     }
 
-    public static Builder builder() {
-        return new Builder();
-    }
-
     public static class Builder {
 
         private Path transcriptFilePath;
@@ -288,6 +292,7 @@ public class GenomeDataSources {
         private DataSource splicingDataSource;
         private Path genomeFastaPath;
         private Path genomeFastaFaiPath;
+        private Path genomeFastaDictPath;
 
         //These are all expected to be null as they are optional data sources
         private Path variantWhiteListPath;
@@ -330,6 +335,12 @@ public class GenomeDataSources {
         public Builder genomeFastaFaiPath(Path genomeFastaFaiPath) {
             Objects.requireNonNull(genomeFastaFaiPath);
             this.genomeFastaFaiPath = genomeFastaFaiPath;
+            return this;
+        }
+
+        public Builder genomeFastaDictPath(Path genomeFastaDictPath) {
+            Objects.requireNonNull(genomeFastaDictPath);
+            this.genomeFastaDictPath = genomeFastaDictPath;
             return this;
         }
 
