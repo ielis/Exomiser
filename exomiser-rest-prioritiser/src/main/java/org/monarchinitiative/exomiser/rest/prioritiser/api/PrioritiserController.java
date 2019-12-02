@@ -31,13 +31,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -76,7 +75,8 @@ public class PrioritiserController {
         return "This service will return a collection of prioritiser results for any given set of:" +
                 "\n\t - HPO identifiers e.g. HPO:00001" +
                 "\n\t - Entrez gene identifiers e.g. 23364" +
-                "\n\t - Specified prioritiser e.g. hiphive along with any prioritiser specific commands e.g. human,mouse,fish,ppi";
+                "\n\t - Specified prioritiser e.g. hiphive along with any prioritiser specific commands e.g. human,mouse,fish,ppi" +
+                "\n\t - limit the number of genes returned e.g. 10";
     }
 
     @GetMapping(value = "", produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
@@ -86,31 +86,38 @@ public class PrioritiserController {
                                            @RequestParam(value = "prioritiser-params", required = false, defaultValue = "") String prioritiserParams,
                                            @RequestParam(value = "limit", required = false, defaultValue = "0") Integer limit
     ) {
+        PrioritiserRequest prioritiserRequest = PrioritiserRequest.builder()
+                .prioritiser(prioritiserName)
+                .prioritiserParams(prioritiserParams)
+                .genes(genesIds)
+                .phenotypes(phenotypes)
+                .limit(limit)
+                .build();
 
-        logger.info("phenotypes: {}({}) genes: {} prioritiser: {} prioritiser-params: {}", phenotypes, phenotypes.size(), genesIds, prioritiserName, prioritiserParams);
+        return prioritise(prioritiserRequest);
+    }
+
+    @PostMapping(value = "", consumes = MediaType.APPLICATION_JSON_UTF8_VALUE, produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    public PrioritiserResultSet prioritise(@RequestBody PrioritiserRequest prioritiserRequest) {
+        logger.info("{}", prioritiserRequest);
 
         Instant start = Instant.now();
 
-        Prioritiser prioritiser = parsePrioritiser(prioritiserName, prioritiserParams);
-        List<String> uniquePhenotypes = phenotypes.stream().distinct().collect(toImmutableList());
-        List<Gene> genes = makeGenesFromIdentifiers(genesIds);
-        List<PriorityResult> results = runLimitAndCollectResults(prioritiser, uniquePhenotypes, genes, limit);
+        Prioritiser<? extends PriorityResult> prioritiser = parsePrioritiser(prioritiserRequest.getPrioritiser(), prioritiserRequest
+                .getPrioritiserParams());
+        List<Gene> genes = makeGenesFromIdentifiers(prioritiserRequest.getGenes());
+
+        List<PriorityResult> results = runLimitAndCollectResults(prioritiser, prioritiserRequest.getPhenotypes(), genes, prioritiserRequest
+                .getLimit());
 
         Instant end = Instant.now();
         Duration duration = Duration.between(start, end);
 
-        Map<String, String> params = new LinkedHashMap<>();
-        params.put("phenotypes", phenotypes.toString());
-        params.put("genes", genesIds.toString());
-        params.put("prioritiser", prioritiserName);
-        params.put("prioritiser-params", prioritiserParams);
-        params.put("limit", limit.toString());
-
-        return new PrioritiserResultSet(params, duration.toMillis(), results);
+        return new PrioritiserResultSet(prioritiserRequest, duration.toMillis(), results);
     }
 
-    private Prioritiser parsePrioritiser(String prioritiserName, String prioritiserParams) {
-        switch(prioritiserName) {
+    private Prioritiser<? extends PriorityResult> parsePrioritiser(String prioritiserName, String prioritiserParams) {
+        switch (prioritiserName) {
             case "phenix":
                 return priorityFactory.makePhenixPrioritiser();
             case "phive":
@@ -129,9 +136,7 @@ public class PrioritiserController {
             logger.info("Gene identifiers not specified - will compare against all known genes.");
             //If not specified, we'll assume they want to use the whole genome. Should save people a lot of typing.
             //n.b. Gene is mutable so these can't be cached and returned.
-            return geneIdentifiers.values().parallelStream()
-                    .map(Gene::new)
-                    .collect(toImmutableList());
+            return allGenes();
         }
         // This is a hack - really the Prioritiser should only work on GeneIds, but currently this isn't possible as
         // OmimPrioritiser uses some properties of Gene
@@ -140,13 +145,23 @@ public class PrioritiserController {
                 .collect(toImmutableList());
     }
 
+    private List<Gene> allGenes() {
+        return geneIdentifiers.values().parallelStream()
+                .map(Gene::new)
+                .collect(toImmutableList());
+    }
+
     private GeneIdentifier unrecognisedGeneIdentifier(Integer id) {
         return GeneIdentifier.builder().geneSymbol("GENE:" + id).build();
     }
 
-    private List<PriorityResult> runLimitAndCollectResults(Prioritiser prioritiser, List<String> phenotypes, List<Gene> genes, int limit) {
-        Stream<PriorityResult> resultsStream = prioritiser.prioritise(phenotypes, genes)
+    private <T extends PriorityResult> List<PriorityResult> runLimitAndCollectResults(Prioritiser<T> prioritiser, List<String> phenotypes, List<Gene> genes, int limit) {
+        Set<Integer> wantedGeneIds = genes.stream().map(Gene::getEntrezGeneID).collect(Collectors.toSet());
+
+        Stream<T> resultsStream = prioritiser.prioritise(phenotypes, genes)
+                .filter(result -> wantedGeneIds.contains(result.getGeneId()))
                 .sorted(Comparator.naturalOrder());
+
         logger.info("Finished {}", prioritiser.getPriorityType());
         if (limit == 0) {
             return resultsStream.collect(toImmutableList());
