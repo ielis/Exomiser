@@ -48,7 +48,7 @@ import static java.util.stream.Collectors.toList;
  */
 public class SvPathogenicityDao implements PathogenicityDao {
 
-    private final Logger logger = LoggerFactory.getLogger(SvFrequencyDao.class);
+    private final Logger logger = LoggerFactory.getLogger(SvPathogenicityDao.class);
 
     private final DataSource svDataSource;
 
@@ -132,43 +132,41 @@ public class SvPathogenicityDao implements PathogenicityDao {
     }
 
     private List<SvResult> runQuery(Variant variant, int margin) {
-        String query = "SELECT *\n" +
-                "FROM (\n" +
-                "         SELECT 'DBVAR' as SOURCE,\n" +
-                "                CHR_ONE,\n" +
-                "                POS_ONE,\n" +
-                "                POS_TWO,\n" +
-                "                SV_LEN,\n" +
-                "                SV_TYPE,\n" +
-                "                DBVAR_ACC as ID,\n" +
-                "                CLNSIG,\n" +
-                "                CLNSIG_SOURCE,\n" +
-                "                CLINVAR_ACCESSIONS\n" +
-                "         FROM DBVAR\n" +
-                "         UNION ALL\n" +
-                "         SELECT 'ISCA' as SOURCE,\n" +
-                "                CONTIG as CHR_ONE,\n" +
-                "                POS_ONE,\n" +
-                "                POS_TWO,\n" +
-                "                SV_LEN,\n" +
-                "                SV_TYPE,\n" +
-                "                ID,\n" +
-                "                CLNSIG,\n" +
-                "                CLNSIG_SOURCE,\n" +
-                "                CLINVAR_ACCESSIONS\n" +
-                "         FROM ISCA\n" +
-                "     ) all_tables\n" +
-                "WHERE CHR_ONE = ?\n" +
-                "  and POS_ONE >= ? - ?\n" +
-                "  and POS_ONE <= ? + ?\n" +
-                "  and POS_TWO >= ? - ?\n" +
-                "  and POS_TWO <= ? + ?\n" +
-                "  and CLNSIG != 'UNKNOWN';";
+        String query = "SELECT * " +
+                " FROM (" +
+                "         SELECT 'DBVAR' as SOURCE," +
+                "                CHR_ONE," +
+                "                POS_ONE," +
+                "                POS_TWO," +
+                "                SV_LEN," +
+                "                SV_TYPE," +
+                "                ID," +
+                "                CLNSIG," +
+                "                CLNSIG_SOURCE," +
+                "                CLINVAR_ACCESSIONS" +
+                "         FROM PBGA.DBVAR_VARIANTS" +
+                "         UNION ALL" +
+                "         SELECT 'ISCA' as SOURCE," +
+                "                CHR_ONE," +
+                "                POS_ONE," +
+                "                POS_TWO," +
+                "                SV_LEN," +
+                "                SV_TYPE," +
+                "                ID," +
+                "                CLNSIG," +
+                "                CLNSIG_SOURCE," +
+                "                CLINVAR_ACCESSIONS" +
+                "         FROM PBGA.ISCA" +
+                "     ) all_tables " +
+                " WHERE CHR_ONE = ?" +
+                "   and POS_ONE >= ? - ?" +
+                "   and POS_ONE <= ? + ?" +
+                "   and POS_TWO >= ? - ?" +
+                "   and POS_TWO <= ? + ?" +
+                "   and CLNSIG != 'UNKNOWN';";
 
-        try (
-                Connection connection = svDataSource.getConnection();
-                PreparedStatement ps = connection.prepareStatement(query)
-        ) {
+        try (Connection connection = svDataSource.getConnection();
+             PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setInt(1, variant.getChromosome());
             ps.setInt(2, variant.getStart());
             ps.setInt(3, margin);

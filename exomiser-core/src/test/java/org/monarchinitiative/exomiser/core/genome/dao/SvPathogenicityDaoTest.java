@@ -26,10 +26,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.monarchinitiative.exomiser.core.model.StructuralType;
 import org.monarchinitiative.exomiser.core.model.Variant;
 import org.monarchinitiative.exomiser.core.model.VariantAnnotation;
+import org.monarchinitiative.exomiser.core.model.pathogenicity.ClinVarData;
 import org.monarchinitiative.exomiser.core.model.pathogenicity.PathogenicityData;
+import org.monarchinitiative.exomiser.core.model.pathogenicity.PathogenicityScore;
+import org.monarchinitiative.exomiser.core.model.pathogenicity.PathogenicitySource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
+
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 /**
  * @author Jules Jacobsen <j.jacobsen@qmul.ac.uk>
@@ -82,5 +88,25 @@ class SvPathogenicityDaoTest {
         PathogenicityData result = instance.getPathogenicityData(variant);
 
         System.out.println(result);
+    }
+
+    @Test
+    void getPathogenicityData() {
+        Variant variant = VariantAnnotation.builder()
+                .chromosome(9)
+                .start(133_388_590)
+                .end(141_018_980)
+                .structuralType(StructuralType.DUP)
+                .build();
+
+        PathogenicityData result = instance.getPathogenicityData(variant);
+
+        assertThat(result, is(PathogenicityData.of(ClinVarData.builder()
+                        .alleleId("RCV000133778.3")
+                        .primaryInterpretation(ClinVarData.ClinSig.PATHOGENIC)
+                        .reviewStatus("")
+                        .build(),
+                PathogenicityScore.of(PathogenicitySource.DBVAR, 1.000F),
+                PathogenicityScore.of(PathogenicitySource.ISCA, 1.000F))));
     }
 }

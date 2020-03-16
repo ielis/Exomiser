@@ -38,19 +38,20 @@ public class TestSvDataSourceConfig {
     }
 
     private HikariConfig svDataSourceConfig() {
-        Path dbPath = Path.of("/Users/hhx640/Documents/sv_build/hg19_sv_database");
+//        Path dbPath = Path.of("/Users/hhx640/Documents/sv_build/hg19_sv_database");
 //        Path dbPath = Path.of("/Users/damiansmedley/exomiser-data/hg19_sv_database");
+        Path dbPath = Path.of(TestSvDataSourceConfig.class.getResource("/hg19_sv_small.mv.db").getPath());
 
         String startUpArgs = ";SCHEMA=PBGA;DATABASE_TO_UPPER=FALSE;IFEXISTS=TRUE;AUTO_RECONNECT=TRUE;ACCESS_MODE_DATA=r;";
 
-        String jdbcUrl = String.format("jdbc:h2:file:%s%s", dbPath.toAbsolutePath(), startUpArgs);
+        String jdbcUrl = String.format("jdbc:h2:file:%s%s", dbPath.toAbsolutePath().toString().replace(".mv.db", ""), startUpArgs);
 
         HikariConfig config = new HikariConfig();
         config.setDriverClassName("org.h2.Driver");
         config.setJdbcUrl(jdbcUrl);
 //        config.setJdbcUrl("jdbc:h2:mem:");
         config.setUsername("sa");
-        config.setPassword("");
+        config.setPassword("sa");
         config.setMaximumPoolSize(3);
         config.setPoolName("exomiser-sv");
         return config;

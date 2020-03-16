@@ -71,9 +71,6 @@ public class SvFrequencyDao implements FrequencyDao {
                     .map(Map.Entry::getValue)
                     .orElse(List.of());
 
-//            logger.info("Top match(es)");
-//            topMatches.forEach(svResult -> logger.info("{}", svResult));
-
             if (topMatches.isEmpty()) {
                 return FrequencyData.empty();
             }
@@ -116,74 +113,71 @@ public class SvFrequencyDao implements FrequencyDao {
     }
 
     private List<SvResult> runQuery(Variant variant, int margin) {
-        String query = "SELECT *\n" +
-                "FROM (\n" +
-                "         SELECT 'GNOMAD_SV' as SOURCE,\n" +
-                "                CHR_ONE,\n" +
-                "                POS_ONE,\n" +
-                "                POS_TWO,\n" +
-                "                SV_LEN,\n" +
-                "                SV_TYPE,\n" +
-                "                ID,\n" +
-                "                AC,\n" +
-                "                AF\n" +
-                "         FROM GNOMAD_SV\n" +
-                "         UNION ALL\n" +
-                "         SELECT 'DBVAR'          as SOURCE,\n" +
-                "                CHR_ONE,\n" +
-                "                POS_ONE,\n" +
-                "                POS_TWO,\n" +
-                "                SV_LEN,\n" +
-                "                SV_TYPE,\n" +
-                "                DBVAR_ACC        as ID,\n" +
-                "                ALLELE_COUNT     as AC,\n" +
-                "                ALLELE_FREQUENCY as AF\n" +
-                "         FROM DBVAR\n" +
-                "         UNION ALL\n" +
-                "         SELECT 'GONL' as SOURCE,\n" +
-                "                CHR_ONE,\n" +
-                "                POS_ONE,\n" +
-                "                POS_TWO,\n" +
-                "                SV_LEN,\n" +
-                "                SV_TYPE,\n" +
-                "                ID,\n" +
-                "                AN     as AC,\n" +
-                "                AF\n" +
-                "         FROM GONL\n" +
-                "         UNION ALL\n" +
-                "         SELECT 'DGV' as SOURCE,\n" +
-                "                CONTIG         as CHR_ONE,\n" +
-                "                POS_ONE,\n" +
-                "                POS_TWO,\n" +
-                "                POS_TWO - POS_ONE as SV_LEN,\n" +
-                "                SV_TYPE,\n" +
-                "                ACCESSION      as ID,\n" +
-                "                SAMPLE_SIZE    as AC,\n" +
-                "                0              as AF\n" +
-                "         FROM DGV_VARIANTS\n" +
-                "         UNION ALL\n" +
-                "         SELECT 'DECIPHER'    as SOURCE,\n" +
-                "                CONTIG            as CHR_ONE,\n" +
-                "                POS_ONE,\n" +
-                "                POS_TWO,\n" +
-                "                POS_TWO - POS_ONE as SV_LEN,\n" +
-                "                SV_TYPE,\n" +
-                "                POPULATION_CNV_ID as ID,\n" +
-                "                OBSERVATIONS      as AC,\n" +
-                "                FREQUENCY         as AF\n" +
-                "         FROM DECIPHER_CNV\n" +
-                "     ) all_tables\n" +
-                "WHERE CHR_ONE = ?\n" +
-                "  and POS_ONE >= ? - ?\n" +
-                "  and POS_ONE <= ? + ?\n" +
-                "  and POS_TWO >= ? - ?\n" +
-                "  and POS_TWO <= ? + ?\n" +
+        String query = "SELECT * " +
+                "FROM ( SELECT 'GNOMAD_SV' as SOURCE, " +
+                "                CHR_ONE," +
+                "                POS_ONE," +
+                "                POS_TWO," +
+                "                SV_LEN," +
+                "                SV_TYPE," +
+                "                ID," +
+                "                AC," +
+                "                AF" +
+                "         FROM PBGA.GNOMAD_SV" +
+                "         UNION ALL" +
+                "         SELECT 'DBVAR' as SOURCE," +
+                "                CHR_ONE," +
+                "                POS_ONE," +
+                "                POS_TWO," +
+                "                SV_LEN," +
+                "                SV_TYPE," +
+                "                ID," +
+                "                AC," +
+                "                AF" +
+                "         FROM PBGA.DBVAR_VARIANTS" +
+                "         UNION ALL" +
+                "         SELECT 'GONL' as SOURCE," +
+                "                CHR_ONE," +
+                "                POS_ONE," +
+                "                POS_TWO," +
+                "                SV_LEN," +
+                "                SV_TYPE," +
+                "                ID," +
+                "                AN     as AC," +
+                "                AF" +
+                "         FROM PBGA.GONL" +
+                "         UNION ALL" +
+                "         SELECT 'DGV' as SOURCE," +
+                "                CHR_ONE," +
+                "                POS_ONE," +
+                "                POS_TWO," +
+                "                SV_LEN," +
+                "                SV_TYPE," +
+                "                ID," +
+                "                AC," +
+                "                0              as AF" +
+                "         FROM PBGA.DGV_VARIANTS" +
+                "         UNION ALL" +
+                "         SELECT 'DECIPHER'    as SOURCE," +
+                "                CHR_ONE," +
+                "                POS_ONE," +
+                "                POS_TWO," +
+                "                SV_LEN," +
+                "                SV_TYPE," +
+                "                ID," +
+                "                AC," +
+                "                AF" +
+                "         FROM PBGA.DECIPHER_CNV" +
+                "     ) all_tables " +
+                "WHERE CHR_ONE = ?" +
+                "  and POS_ONE >= ? - ?" +
+                "  and POS_ONE <= ? + ?" +
+                "  and POS_TWO >= ? - ?" +
+                "  and POS_TWO <= ? + ?" +
                 "  and AC != -1;";
 
-        try (
-                Connection connection = svDataSource.getConnection();
-                PreparedStatement ps = connection.prepareStatement(query)
-        ) {
+        try (Connection connection = svDataSource.getConnection();
+             PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setInt(1, variant.getChromosome());
             ps.setInt(2, variant.getStart());
             ps.setInt(3, margin);
@@ -193,7 +187,6 @@ public class SvFrequencyDao implements FrequencyDao {
             ps.setInt(7, margin);
             ps.setInt(8, variant.getEnd());
             ps.setInt(9, margin);
-
             ResultSet rs = ps.executeQuery();
 
 // consider also complex types where CHR_ONE != CHR_TWO - there are only about 600 in gnomad and gonl combined.

@@ -26,10 +26,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.monarchinitiative.exomiser.core.model.StructuralType;
 import org.monarchinitiative.exomiser.core.model.Variant;
 import org.monarchinitiative.exomiser.core.model.VariantAnnotation;
+import org.monarchinitiative.exomiser.core.model.frequency.Frequency;
 import org.monarchinitiative.exomiser.core.model.frequency.FrequencyData;
+import org.monarchinitiative.exomiser.core.model.frequency.FrequencySource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
+
+import java.util.Set;
+
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 /**
  * @author Jules Jacobsen <j.jacobsen@qmul.ac.uk>
@@ -199,4 +206,17 @@ class SvFrequencyDaoTest {
         System.out.println(result);
     }
 
+    @Test
+    void getFrequencyData() {
+        // test that `getFrequencyData` method works with the small database
+        Variant variant = VariantAnnotation.builder()
+                .chromosome(9)
+                .start(136_195_720)
+                .end(136_198_660)
+                .structuralType(StructuralType.DEL)
+                .build();
+
+        FrequencyData result = instance.getFrequencyData(variant);
+        assertThat(result, is(FrequencyData.of("gnomAD_v2_DEL_9_124571", Set.of(Frequency.of(FrequencySource.GNOMAD_SV, .0047F)))));
+    }
 }
