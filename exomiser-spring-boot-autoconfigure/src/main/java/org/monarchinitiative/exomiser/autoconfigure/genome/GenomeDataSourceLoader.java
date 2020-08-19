@@ -62,11 +62,10 @@ public class GenomeDataSourceLoader {
     private final TabixDataSource caddSnvTabixDataSource;
     private final TabixDataSource caddIndelTabixDataSource;
     private final TabixDataSource remmTabixDataSource;
-    private final TabixDataSource testPathogenicityTabixDataSource;
+    private final TabixDataSource capiceSnvTabixDataSource;
+    private final TabixDataSource capiceIndelTabixDataSource;
 
-    public static GenomeDataSourceLoader load(GenomeDataSources genomeDataSources) {
-        return new GenomeDataSourceLoader(genomeDataSources);
-    }
+    private final TabixDataSource testPathogenicityTabixDataSource;
 
     private GenomeDataSourceLoader(GenomeDataSources genomeDataSources) {
         this.dataSource = genomeDataSources.getGenomeDataSource();
@@ -85,7 +84,14 @@ public class GenomeDataSourceLoader {
         this.caddSnvTabixDataSource = getTabixDataSourceOrDefault("CADD snv", genomeDataSources.getCaddSnvPath());
         this.caddIndelTabixDataSource = getTabixDataSourceOrDefault("CADD InDel", genomeDataSources.getCaddIndelPath());
         this.remmTabixDataSource = getTabixDataSourceOrDefault("REMM", genomeDataSources.getRemmPath());
+        this.capiceSnvTabixDataSource = getTabixDataSourceOrDefault("CAPICE snv", genomeDataSources.getCapiceSnvPath());
+        this.capiceIndelTabixDataSource = getTabixDataSourceOrDefault("CAPICE InDel", genomeDataSources.getCapiceIndelPath());
         this.testPathogenicityTabixDataSource = getTabixDataSourceOrDefault("TEST", genomeDataSources.getTestPathogenicityPath());
+
+    }
+
+    public static GenomeDataSourceLoader load(GenomeDataSources genomeDataSources) {
+        return new GenomeDataSourceLoader(genomeDataSources);
     }
 
     private VariantWhiteList loadVariantWhiteList(Optional<Path> variantWhiteListPath) {
@@ -94,7 +100,7 @@ public class GenomeDataSourceLoader {
             logger.info("Loading variant whitelist from: {}", whiteListPath);
             // this should be a tabix-indexed gzip file
             ImmutableSet.Builder<AlleleProto.AlleleKey> whiteListBuilder = new ImmutableSet.Builder<>();
-            try(BufferedReader  bufferedReader = new BufferedReader(new InputStreamReader(new GZIPInputStream(Files.newInputStream(whiteListPath)), StandardCharsets.UTF_8))){
+            try (BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(new GZIPInputStream(Files.newInputStream(whiteListPath)), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = bufferedReader.readLine()) != null) {
                     if (line.startsWith("#")) {
@@ -171,6 +177,14 @@ public class GenomeDataSourceLoader {
         return remmTabixDataSource;
     }
 
+    public TabixDataSource getCapiceSnvTabixDataSource() {
+        return capiceSnvTabixDataSource;
+    }
+
+    public TabixDataSource getCapiceIndelTabixDataSource() {
+        return capiceIndelTabixDataSource;
+    }
+
     public TabixDataSource getTestPathogenicityTabixDataSource() {
         return testPathogenicityTabixDataSource;
     }
@@ -186,12 +200,14 @@ public class GenomeDataSourceLoader {
                 Objects.equals(localFrequencyTabixDataSource, that.localFrequencyTabixDataSource) &&
                 Objects.equals(caddSnvTabixDataSource, that.caddSnvTabixDataSource) &&
                 Objects.equals(caddIndelTabixDataSource, that.caddIndelTabixDataSource) &&
-                Objects.equals(remmTabixDataSource, that.remmTabixDataSource);
+                Objects.equals(remmTabixDataSource, that.remmTabixDataSource) &&
+                Objects.equals(capiceSnvTabixDataSource, that.capiceSnvTabixDataSource) &&
+                Objects.equals(capiceIndelTabixDataSource, that.capiceIndelTabixDataSource);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(dataSource, jannovarData, mvStore, localFrequencyTabixDataSource, caddSnvTabixDataSource, caddIndelTabixDataSource, remmTabixDataSource);
+        return Objects.hash(dataSource, jannovarData, mvStore, localFrequencyTabixDataSource, caddSnvTabixDataSource, caddIndelTabixDataSource, remmTabixDataSource, capiceSnvTabixDataSource, capiceIndelTabixDataSource);
     }
 
 }

@@ -57,6 +57,7 @@ public class Hg19GenomeAnalysisServiceAutoConfigurationTest extends AbstractAuto
 
         assertThat(context.getBean("hg19remmDao"), instanceOf(RemmDao.class));
         assertThat(context.getBean("hg19caddDao"), instanceOf(CaddDao.class));
+        assertThat(context.getBean("hg19capiceDao"), instanceOf(CapiceDao.class));
         assertThat(context.getBean("hg19localFrequencyDao"), instanceOf(LocalFrequencyDao.class));
     }
 

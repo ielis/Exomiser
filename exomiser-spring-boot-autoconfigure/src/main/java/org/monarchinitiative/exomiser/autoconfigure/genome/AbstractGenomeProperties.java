@@ -47,6 +47,8 @@ public abstract class AbstractGenomeProperties implements GenomeProperties {
     private String caddSnvPath = "";
     private String caddInDelPath = "";
     private String remmPath = "";
+    private String capiceSnvPath = "";
+    private String capiceInDelPath = "";
     private String localFrequencyPath = "";
 
     // 'special' tabix datasource for quickly testing new pathogenicity data sources before plumbing them into the main
@@ -132,6 +134,26 @@ public abstract class AbstractGenomeProperties implements GenomeProperties {
 
     public void setRemmPath(String remmPath) {
         this.remmPath = remmPath;
+    }
+
+    @Override
+    public String getCapiceSnvPath() {
+        return capiceSnvPath;
+    }
+
+    @Override
+    public void setCapiceSnvPath(String capiceSnvPath) {
+        this.capiceSnvPath = capiceSnvPath;
+    }
+
+    @Override
+    public String getCapiceInDelPath() {
+        return capiceInDelPath;
+    }
+
+    @Override
+    public void setCapiceInDelPath(String capiceInDelPath) {
+        this.capiceInDelPath = capiceInDelPath;
     }
 
     public String getLocalFrequencyPath() {

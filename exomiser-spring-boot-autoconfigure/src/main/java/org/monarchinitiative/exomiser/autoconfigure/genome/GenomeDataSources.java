@@ -43,19 +43,38 @@ public class GenomeDataSources {
 
     private static final Logger logger = LoggerFactory.getLogger(GenomeDataSources.class);
 
-    private Path transcriptFilePath;
-    private Path mvStorePath;
-    private DataSource genomeDataSource;
+    private final Path transcriptFilePath;
+    private final Path mvStorePath;
+    private final DataSource genomeDataSource;
 
-    private Path variantWhiteListPath;
+    private final Path variantWhiteListPath;
 
     // Tabix files
-    private Path localFrequencyPath;
-    private Path caddSnvPath;
-    private Path caddIndelPath;
-    private Path remmPath;
+    private final Path localFrequencyPath;
+    private final Path caddSnvPath;
+    private final Path caddIndelPath;
+    private final Path remmPath;
+    private final Path capiceSnvPath;
+    private final Path capiceIndelPath;
 
-    private Path testPathogenicityScorePath;
+    private final Path testPathogenicityScorePath;
+
+    private GenomeDataSources(Builder builder) {
+        this.transcriptFilePath = builder.transcriptFilePath;
+        this.genomeDataSource = builder.genomeDataSource;
+        this.mvStorePath = builder.mvStorePath;
+
+        this.variantWhiteListPath = builder.variantWhiteListPath;
+
+        this.localFrequencyPath = builder.localFrequencyPath;
+        this.caddSnvPath = builder.caddSnvPath;
+        this.caddIndelPath = builder.caddIndelPath;
+        this.remmPath = builder.remmPath;
+        this.capiceSnvPath = builder.capiceSnvPath;
+        this.capiceIndelPath = builder.capiceIndelPath;
+        this.testPathogenicityScorePath = builder.testPathogenicityPath;
+    }
+
     /**
      * Static constructor which will automatically resolve the resources for the supplied {@code GenomeProperties} where
      * the data directory for the data version and genome assembly are to be found on the {@code exomiserDataDirectory}
@@ -81,6 +100,8 @@ public class GenomeDataSources {
         Path caddSnvPath = resolvePathOrNullIfEmpty(genomeProperties.getCaddSnvPath(), genomeDataResolver);
         Path caddIndelPath = resolvePathOrNullIfEmpty(genomeProperties.getCaddInDelPath(), genomeDataResolver);
         Path remmPath = resolvePathOrNullIfEmpty(genomeProperties.getRemmPath(), genomeDataResolver);
+        Path capiceSnvPath = resolvePathOrNullIfEmpty(genomeProperties.getCapiceSnvPath(), genomeDataResolver);
+        Path capiceIndelPath = resolvePathOrNullIfEmpty(genomeProperties.getCapiceInDelPath(), genomeDataResolver);
 
         Path testPathogenicityPath = resolvePathOrNullIfEmpty(genomeProperties.getTestPathogenicityScorePath(), genomeDataResolver);
 
@@ -93,6 +114,8 @@ public class GenomeDataSources {
                 .caddSnvPath(caddSnvPath)
                 .caddIndelPath(caddIndelPath)
                 .remmPath(remmPath)
+                .capiceSnvPath(capiceSnvPath)
+                .capiceIndelPath(capiceIndelPath)
                 .testPathogenicityScorePath(testPathogenicityPath)
                 .build();
     }
@@ -136,18 +159,8 @@ public class GenomeDataSources {
         return genomeDataResolver.resolveAbsoluteResourcePath(pathToTabixGzFile);
     }
 
-    private GenomeDataSources(Builder builder) {
-        this.transcriptFilePath = builder.transcriptFilePath;
-        this.genomeDataSource = builder.genomeDataSource;
-        this.mvStorePath = builder.mvStorePath;
-
-        this.variantWhiteListPath = builder.variantWhiteListPath;
-
-        this.localFrequencyPath = builder.localFrequencyPath;
-        this.caddSnvPath = builder.caddSnvPath;
-        this.caddIndelPath = builder.caddIndelPath;
-        this.remmPath = builder.remmPath;
-        this.testPathogenicityScorePath = builder.testPathogenicityPath;
+    public static Builder builder() {
+        return new Builder();
     }
 
     public Path getTranscriptFilePath() {
@@ -186,6 +199,14 @@ public class GenomeDataSources {
         return Optional.ofNullable(remmPath);
     }
 
+    public Optional<Path> getCapiceSnvPath() {
+        return Optional.ofNullable(capiceSnvPath);
+    }
+
+    public Optional<Path> getCapiceIndelPath() {
+        return Optional.ofNullable(capiceIndelPath);
+    }
+
     public Optional<Path> getTestPathogenicityPath() {
         return Optional.ofNullable(testPathogenicityScorePath);
     }
@@ -201,12 +222,14 @@ public class GenomeDataSources {
                 Objects.equals(localFrequencyPath, that.localFrequencyPath) &&
                 Objects.equals(caddSnvPath, that.caddSnvPath) &&
                 Objects.equals(caddIndelPath, that.caddIndelPath) &&
+                Objects.equals(capiceSnvPath, that.capiceSnvPath) &&
+                Objects.equals(capiceIndelPath, that.capiceIndelPath) &&
                 Objects.equals(remmPath, that.remmPath);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(transcriptFilePath, mvStorePath, genomeDataSource, localFrequencyPath, caddSnvPath, caddIndelPath, remmPath);
+        return Objects.hash(transcriptFilePath, mvStorePath, genomeDataSource, localFrequencyPath, caddSnvPath, caddIndelPath, remmPath, capiceSnvPath, capiceIndelPath);
     }
 
     @Override
@@ -219,11 +242,9 @@ public class GenomeDataSources {
                 ", caddSnvPath=" + caddSnvPath +
                 ", caddIndelPath=" + caddIndelPath +
                 ", remmPath=" + remmPath +
+                ", capiceSnvPath=" + capiceSnvPath +
+                ", capiceIndelPath=" + capiceIndelPath +
                 '}';
-    }
-
-    public static Builder builder() {
-        return new Builder();
     }
 
     public static class Builder {
@@ -238,6 +259,8 @@ public class GenomeDataSources {
         private Path caddSnvPath = null;
         private Path caddIndelPath = null;
         private Path remmPath = null;
+        private Path capiceSnvPath = null;
+        private Path capiceIndelPath = null;
         private Path testPathogenicityPath = null;
 
         public Builder transcriptFilePath(Path transcriptFilePath) {
@@ -296,6 +319,22 @@ public class GenomeDataSources {
          */
         public Builder remmPath(Path remmPath) {
             this.remmPath = remmPath;
+            return this;
+        }
+
+        /**
+         * Optional full system path to CAPICE SNVs TSV file.
+         */
+        public Builder capiceSnvPath(Path capiceSnvPath) {
+            this.capiceSnvPath = capiceSnvPath;
+            return this;
+        }
+
+        /**
+         * Optional full system path to CAPICE INDELs TSV file.
+         */
+        public Builder capiceIndelPath(Path capiceIndelPath) {
+            this.capiceIndelPath = capiceIndelPath;
             return this;
         }
 

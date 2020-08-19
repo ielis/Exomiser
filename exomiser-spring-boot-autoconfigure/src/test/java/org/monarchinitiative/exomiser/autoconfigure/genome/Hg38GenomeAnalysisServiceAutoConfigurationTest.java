@@ -57,6 +57,7 @@ public class Hg38GenomeAnalysisServiceAutoConfigurationTest extends AbstractAuto
 
         assertThat(context.getBean("hg38remmDao"), instanceOf(RemmDao.class));
         assertThat(context.getBean("hg38caddDao"), instanceOf(CaddDao.class));
+        assertThat(context.getBean("hg38capiceDao"), instanceOf(CapiceDao.class));
         assertThat(context.getBean("hg38localFrequencyDao"), instanceOf(LocalFrequencyDao.class));
     }
 

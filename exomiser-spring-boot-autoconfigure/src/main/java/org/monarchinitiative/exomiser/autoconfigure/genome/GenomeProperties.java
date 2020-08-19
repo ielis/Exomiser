@@ -75,6 +75,14 @@ interface GenomeProperties {
 
     public void setRemmPath(String remmPath);
 
+    public String getCapiceSnvPath();
+
+    public void setCapiceSnvPath(String capiceSnvPath);
+
+    public String getCapiceInDelPath();
+
+    public void setCapiceInDelPath(String capiceInDelPath);
+
     public String getLocalFrequencyPath();
 
     public void setLocalFrequencyPath(String localFrequencyPath);

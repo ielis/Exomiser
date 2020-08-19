@@ -55,6 +55,9 @@ public class GenomeDataSourcesTest {
         assertThat(instance.getCaddIndelPath(), equalTo(Optional.empty()));
         assertThat(instance.getCaddSnvPath(), equalTo(Optional.empty()));
         assertThat(instance.getRemmPath(), equalTo(Optional.empty()));
+        assertThat(instance.getCapiceIndelPath(), equalTo(Optional.empty()));
+        assertThat(instance.getCapiceSnvPath(), equalTo(Optional.empty()));
+
         assertThat(instance.getLocalFrequencyPath(), equalTo(Optional.of(expectedParent.resolve("local_freq.tsv.gz"))));
     }
 
@@ -106,6 +109,8 @@ public class GenomeDataSourcesTest {
         assertThat(instance.getCaddSnvPath(), equalTo(Optional.empty()));
         assertThat(instance.getCaddIndelPath(), equalTo(Optional.empty()));
         assertThat(instance.getRemmPath(), equalTo(Optional.empty()));
+        assertThat(instance.getCapiceSnvPath(), equalTo(Optional.empty()));
+        assertThat(instance.getCapiceIndelPath(), equalTo(Optional.empty()));
         assertThat(instance.getLocalFrequencyPath(), equalTo(Optional.empty()));
     }
 }
