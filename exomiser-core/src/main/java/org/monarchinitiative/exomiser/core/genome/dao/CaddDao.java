@@ -25,8 +25,6 @@
  */
 package org.monarchinitiative.exomiser.core.genome.dao;
 
-import htsjdk.tribble.readers.TabixReader;
-import org.monarchinitiative.exomiser.core.model.AllelePosition;
 import org.monarchinitiative.exomiser.core.model.Variant;
 import org.monarchinitiative.exomiser.core.model.pathogenicity.CaddScore;
 import org.monarchinitiative.exomiser.core.model.pathogenicity.PathogenicityData;
@@ -35,22 +33,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 
-import java.io.IOException;
- 
 /**
- *
  * @author Jules Jacobsen <jules.jacobsen@sanger.ac.uk>
  */
-public class CaddDao implements PathogenicityDao {
- 
+public class CaddDao extends TabixSnvIndelDao {
+
     private final Logger logger = LoggerFactory.getLogger(CaddDao.class);
 
-    private final TabixDataSource caddInDelTabixDataSource;
-    private final TabixDataSource caddSnvTabixDataSource;
-
     public CaddDao(TabixDataSource caddInDelTabixDataSource, TabixDataSource caddSnvTabixDataSource) {
-        this.caddInDelTabixDataSource = caddInDelTabixDataSource;
-        this.caddSnvTabixDataSource = caddSnvTabixDataSource;
+        super(caddSnvTabixDataSource, caddInDelTabixDataSource);
     }
 
     @Caching(cacheable = {
@@ -63,43 +54,12 @@ public class CaddDao implements PathogenicityDao {
         return processResults(variant);
     }
 
-    private PathogenicityData processResults(Variant variant) {
-        String chromosome = variant.getChromosomeName();
-        String ref = variant.getRef();
-        String alt = variant.getAlt();
-        int start = variant.getPosition();
-        if (AllelePosition.isSnv(ref, alt)) {
-            return getCaddPathogenicityData(caddSnvTabixDataSource, chromosome, start, ref, alt);
-        }
-        return getCaddPathogenicityData(caddInDelTabixDataSource, chromosome, start, ref, alt);
-    }
+    @Override
+    protected PathogenicityData makePathogenicityData(String[] tokens) {
 
-    private PathogenicityData getCaddPathogenicityData(TabixDataSource tabixDataSource, String chromosome, int start, String ref, String alt) {
-        try {
-            TabixReader.Iterator results = tabixDataSource.query(chromosome + ":" + start + "-" + start);
-            String line;
-            //there can be 0 - N results in this format:
-            //#Chrom  Pos     Ref     Alt     RawScore        PHRED
-            //2       14962   C       CA      -0.138930       1.458
-            //2       14962   C       CAA     -0.155009       1.356
-            //2       14962   CA      C       0.194173        4.618
-            while ((line = results.next()) != null) {
-                String[] elements = line.split("\t");
-                String caddRef = elements[2];
-                String caddAlt = elements[3];
-                if (caddRef.equals(ref) && caddAlt.equals(alt)) {
-                    return makeCaddPathData(elements[5]);
-                }
-            }
-        } catch (IOException e) {
-            logger.error("Unable to read from CADD tabix file {}", tabixDataSource.getSource(), e);
-        }
-        return PathogenicityData.empty();
-    }
- 
-    private PathogenicityData makeCaddPathData(String phredScaledCaddScore) {
-        float score = Float.parseFloat(phredScaledCaddScore);
+        float score = Float.parseFloat(tokens[5]);
         CaddScore caddScore = CaddScore.of(score);
         return PathogenicityData.of(caddScore);
     }
+
 }
