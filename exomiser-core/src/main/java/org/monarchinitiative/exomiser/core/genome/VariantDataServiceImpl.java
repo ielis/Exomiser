@@ -60,6 +60,8 @@ public class VariantDataServiceImpl implements VariantDataService {
     private final FrequencyDao localFrequencyDao;
     private final PathogenicityDao caddDao;
     private final PathogenicityDao remmDao;
+    private final PathogenicityDao capiceDao;
+
     private final PathogenicityDao testPathScoreDao;
 
     private VariantDataServiceImpl(Builder builder) {
@@ -72,7 +74,12 @@ public class VariantDataServiceImpl implements VariantDataService {
         this.localFrequencyDao = builder.localFrequencyDao;
         this.caddDao = builder.caddDao;
         this.remmDao = builder.remmDao;
+        this.capiceDao = builder.capiceDao;
         this.testPathScoreDao = builder.testPathScoreDao;
+    }
+
+    public static Builder builder() {
+        return new Builder();
     }
 
     @Override
@@ -146,6 +153,10 @@ public class VariantDataServiceImpl implements VariantDataService {
             daosToQuery.add(caddDao);
         }
 
+        if (pathogenicitySources.contains(PathogenicitySource.CAPICE)) {
+            daosToQuery.add(capiceDao);
+        }
+
         if (pathogenicitySources.contains(PathogenicitySource.TEST)) {
             daosToQuery.add(testPathScoreDao);
         }
@@ -153,10 +164,6 @@ public class VariantDataServiceImpl implements VariantDataService {
         return daosToQuery.parallelStream()
                 .map(pathDao -> pathDao.getPathogenicityData(variant))
                 .collect(toList());
-    }
-
-    public static Builder builder() {
-        return new Builder();
     }
 
     public static class Builder {
@@ -170,6 +177,7 @@ public class VariantDataServiceImpl implements VariantDataService {
 
         private PathogenicityDao caddDao;
         private PathogenicityDao remmDao;
+        private PathogenicityDao capiceDao;
         private PathogenicityDao testPathScoreDao;
 
         public Builder variantWhiteList(VariantWhiteList variantWhiteList) {
@@ -199,6 +207,11 @@ public class VariantDataServiceImpl implements VariantDataService {
 
         public Builder remmDao(PathogenicityDao remmDao) {
             this.remmDao = remmDao;
+            return this;
+        }
+
+        public Builder capiceDao(PathogenicityDao capiceDao) {
+            this.capiceDao = capiceDao;
             return this;
         }
 

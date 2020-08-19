@@ -62,6 +62,8 @@ public class VariantDataServiceImplTest {
     private RemmDao mockRemmDao;
     @Mock
     private CaddDao mockCaddDao;
+    @Mock
+    private CaddDao mockCapiceDao;
 
     private static final ClinVarData PATH_CLINVAR_DATA = ClinVarData.builder().alleleId("12345")
             .primaryInterpretation(ClinVarData.ClinSig.PATHOGENIC)
@@ -79,6 +81,7 @@ public class VariantDataServiceImplTest {
     );
 
     private static final PathogenicityData CADD_DATA = PathogenicityData.of(CaddScore.of(15f));
+    private static final PathogenicityData CAPICE_DATA = PathogenicityData.of(CapiceScore.of(.232f));
 
     private static final VariantEffect REGULATORY_REGION = VariantEffect.REGULATORY_REGION_VARIANT;
 
@@ -91,6 +94,7 @@ public class VariantDataServiceImplTest {
         Mockito.when(defaultFrequencyDao.getFrequencyData(variant)).thenReturn(FREQ_DATA);
         Mockito.when(localFrequencyDao.getFrequencyData(variant)).thenReturn(FrequencyData.empty());
         Mockito.when(mockCaddDao.getPathogenicityData(variant)).thenReturn(CADD_DATA);
+        Mockito.when(mockCapiceDao.getPathogenicityData(variant)).thenReturn(CAPICE_DATA);
 
         instance = VariantDataServiceImpl.builder()
                 .defaultFrequencyDao(defaultFrequencyDao)
@@ -98,6 +102,7 @@ public class VariantDataServiceImplTest {
                 .defaultPathogenicityDao(defaultPathogenicityDao)
                 .caddDao(mockCaddDao)
                 .remmDao(mockRemmDao)
+                .capiceDao(mockCapiceDao)
                 .build();
     }
 
@@ -134,6 +139,13 @@ public class VariantDataServiceImplTest {
         variant = buildVariantOfType(VariantEffect.MISSENSE_VARIANT);
         PathogenicityData result = instance.getVariantPathogenicityData(variant, EnumSet.of(PathogenicitySource.CADD));
         assertThat(result, equalTo(PathogenicityData.of(PATH_CLINVAR_DATA, CADD_DATA.getPredictedScore(PathogenicitySource.CADD))));
+    }
+
+    @Test
+    public void serviceReturnsCapiceDataForMissenseVariant() {
+        variant = buildVariantOfType(VariantEffect.MISSENSE_VARIANT);
+        PathogenicityData result = instance.getVariantPathogenicityData(variant, EnumSet.of(PathogenicitySource.CAPICE));
+        assertThat(result, equalTo(PathogenicityData.of(PATH_CLINVAR_DATA, CAPICE_DATA.getPredictedScore(PathogenicitySource.CAPICE))));
     }
 
     @Test
